@@ -57,8 +57,8 @@ The trained model is **already included** — no dataset download or training re
 **Option A — Clone from GitHub:**
 
 ```bash
-git clone https://github.com/AnirbanSarkar225/fake-news-detector.git
-cd fake-news-detector
+git clone https://github.com/AnirbanSarkar225/Project-News.git
+cd Project-News/fake-news-detector
 ```
 
 **Option B — Download from Google Drive:**

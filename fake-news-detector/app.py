@@ -7,12 +7,22 @@ Supports both direct text input and URL-based article extraction.
 
 import os
 import sys
+import io
+
+# Fix Unicode output on Windows consoles (cp1252 can't print box-drawing/emoji)
+if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
+# Resolve all paths relative to this script's directory, not the CWD
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 import joblib
 import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, SCRIPT_DIR)
 from utils.preprocess import TextPreprocessor
 from utils.scraper import ArticleScraper
 
@@ -197,7 +207,7 @@ st.markdown("""
 @st.cache_resource
 def load_model():
     """Load the trained model pipeline."""
-    model_path = os.path.join("model", "fake_news_model.pkl")
+    model_path = os.path.join(SCRIPT_DIR, "model", "fake_news_model.pkl")
     if os.path.exists(model_path):
         return joblib.load(model_path)
     return None
