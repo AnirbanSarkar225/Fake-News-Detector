@@ -65,19 +65,19 @@ st.markdown("""
         font-weight: 300;
     }
 
-    .result-card {
-        background: linear-gradient(145deg, #1b2d45, #213a54);
-        border-radius: 16px;
-        padding: 1.8rem;
-        margin: 1rem 0;
-        border: 1px solid rgba(78, 205, 196, 0.08);
-        box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+    .result-card, div[data-testid="stVerticalBlockBorderWrapper"] {
+        background: linear-gradient(145deg, #1b2d45, #213a54) !important;
+        border-radius: 16px !important;
+        padding: 1.8rem !important;
+        margin: 1rem 0 !important;
+        border: 1px solid rgba(78, 205, 196, 0.08) !important;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.18) !important;
     }
-    .result-card h3 {
-        color: #d0dce6;
-        font-weight: 600;
-        margin-bottom: 1rem;
-        font-size: 1.15rem;
+    .result-card h3, div[data-testid="stVerticalBlockBorderWrapper"] h3 {
+        color: #d0dce6 !important;
+        font-weight: 600 !important;
+        margin-bottom: 1rem !important;
+        font-size: 1.15rem !important;
     }
 
     .verdict-real {
@@ -310,6 +310,27 @@ def predict_article(text, model, preprocessor):
 
 
 def main():
+    # Start the background update daemon automatically if it isn't already running
+    try:
+        import subprocess
+        updater_path = os.path.join(SCRIPT_DIR, "realtime_update.py")
+        if os.path.exists(updater_path):
+            if os.name == 'nt':
+                # On Windows, launch as a detached process (no console window pop-up)
+                DETACHED_PROCESS = 0x00000008
+                subprocess.Popen([sys.executable, updater_path], 
+                                 creationflags=DETACHED_PROCESS,
+                                 stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL)
+            else:
+                # On Unix/macOS, launch in a new session
+                subprocess.Popen([sys.executable, updater_path], 
+                                 start_new_session=True,
+                                 stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
     st.markdown("""
     <div class="hero-header">
         <h1>🛡️ Fake News & Misinformation Detector</h1>
@@ -417,62 +438,60 @@ def main():
         col_verdict, col_gauge = st.columns([1, 1])
 
         with col_verdict:
-            st.markdown('<div class="result-card">', unsafe_allow_html=True)
-            st.markdown("#### 🏷️ Verdict")
+            with st.container(border=True):
+                st.markdown("#### 🏷️ Verdict")
 
-            pred = results['prediction']
-            conf = results['confidence']
+                pred = results['prediction']
+                conf = results['confidence']
 
-            if pred == 'REAL' and conf > 0.3:
-                verdict_class = "verdict-real"
-                verdict_text = "✅ LIKELY CREDIBLE"
-                verdict_desc = "This article appears to be **credible** based on our analysis."
-            elif pred == 'FAKE' and conf > 0.3:
-                verdict_class = "verdict-fake"
-                verdict_text = "🚨 LIKELY FAKE"
-                verdict_desc = "This article shows signs of **misinformation** or fabrication."
-            else:
-                verdict_class = "verdict-uncertain"
-                verdict_text = "⚠️ UNCERTAIN"
-                verdict_desc = "The model is **uncertain** about this article. Verify with trusted sources."
+                if pred == 'REAL' and conf > 0.3:
+                    verdict_class = "verdict-real"
+                    verdict_text = "✅ LIKELY CREDIBLE"
+                    verdict_desc = "This article appears to be **credible** based on our analysis."
+                elif pred == 'FAKE' and conf > 0.3:
+                    verdict_class = "verdict-fake"
+                    verdict_text = "🚨 LIKELY FAKE"
+                    verdict_desc = "This article shows signs of **misinformation** or fabrication."
+                else:
+                    verdict_class = "verdict-uncertain"
+                    verdict_text = "⚠️ UNCERTAIN"
+                    verdict_desc = "The model is **uncertain** about this article. Verify with trusted sources."
 
-            # Determine correctness level label
-            cred_pct = results['credibility'] * 100
-            if cred_pct >= 80:
-                level_label = "Very High Credibility"
-                level_color = "#4fd1a5"
-            elif cred_pct >= 60:
-                level_label = "High Credibility"
-                level_color = "#7ccf8e"
-            elif cred_pct >= 40:
-                level_label = "Moderate Credibility"
-                level_color = "#f0b060"
-            elif cred_pct >= 20:
-                level_label = "Low Credibility"
-                level_color = "#e88050"
-            else:
-                level_label = "Very Low Credibility"
-                level_color = "#f07070"
+                # Determine correctness level label
+                cred_pct = results['credibility'] * 100
+                if cred_pct >= 80:
+                    level_label = "Very High Credibility"
+                    level_color = "#4fd1a5"
+                elif cred_pct >= 60:
+                    level_label = "High Credibility"
+                    level_color = "#7ccf8e"
+                elif cred_pct >= 40:
+                    level_label = "Moderate Credibility"
+                    level_color = "#f0b060"
+                elif cred_pct >= 20:
+                    level_label = "Low Credibility"
+                    level_color = "#e88050"
+                else:
+                    level_label = "Very Low Credibility"
+                    level_color = "#f07070"
 
-            st.markdown(f'<div style="text-align:center;margin:1.5rem 0;">'
-                        f'<span class="{verdict_class}">{verdict_text}</span></div>',
-                        unsafe_allow_html=True)
-            st.markdown(f"""
-            <div style="text-align:center;margin:1rem 0;">
-                <span style="font-size:2rem;font-weight:700;color:{level_color};">{cred_pct:.1f}%</span>
-                <br>
-                <span style="font-size:0.95rem;color:{level_color};font-weight:600;">{level_label}</span>
-            </div>
-            """, unsafe_allow_html=True)
-            st.markdown(verdict_desc)
-            st.markdown(f"**Model Confidence:** {conf*100:.1f}%")
-            st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="text-align:center;margin:1.5rem 0;">'
+                            f'<span class="{verdict_class}">{verdict_text}</span></div>',
+                            unsafe_allow_html=True)
+                st.markdown(f"""
+                <div style="text-align:center;margin:1rem 0;">
+                    <span style="font-size:2rem;font-weight:700;color:{level_color};">{cred_pct:.1f}%</span>
+                    <br>
+                    <span style="font-size:0.95rem;color:{level_color};font-weight:600;">{level_label}</span>
+                </div>
+                """, unsafe_allow_html=True)
+                st.markdown(verdict_desc)
+                st.markdown(f"**Model Confidence:** {conf*100:.1f}%")
 
         with col_gauge:
-            st.markdown('<div class="result-card">', unsafe_allow_html=True)
-            fig = create_gauge_chart(results['credibility'])
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-            st.markdown('</div>', unsafe_allow_html=True)
+            with st.container(border=True):
+                fig = create_gauge_chart(results['credibility'])
+                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
         indicators = results['indicators']
         m1, m2, m3, m4 = st.columns(4)
@@ -501,27 +520,26 @@ def main():
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        st.markdown('<div class="result-card">', unsafe_allow_html=True)
-        st.markdown("#### 🔎 Sentence-Level Analysis")
-        st.caption("Sentences are ranked by suspicion level — higher scores indicate more suspicious content.")
+        with st.container(border=True):
+            st.markdown("#### 🔎 Sentence-Level Analysis")
+            st.caption("Sentences are ranked by suspicion level — higher scores indicate more suspicious content.")
 
-        for sent, score in results['sentence_analysis'][:10]:
-            if score > 0.5:
-                css_class = "sentence-high"
-                icon = "🔴"
-            elif score > 0.2:
-                css_class = "sentence-medium"
-                icon = "🟡"
-            else:
-                css_class = "sentence-low"
-                icon = "🟢"
+            for sent, score in results['sentence_analysis'][:10]:
+                if score > 0.5:
+                    css_class = "sentence-high"
+                    icon = "🔴"
+                elif score > 0.2:
+                    css_class = "sentence-medium"
+                    icon = "🟡"
+                else:
+                    css_class = "sentence-low"
+                    icon = "🟢"
 
-            display_sent = sent[:200] + "..." if len(sent) > 200 else sent
-            st.markdown(
-                f'<div class="{css_class}">{icon} <b>[{score*100:.0f}%]</b> {display_sent}</div>',
-                unsafe_allow_html=True
-            )
-        st.markdown('</div>', unsafe_allow_html=True)
+                display_sent = sent[:200] + "..." if len(sent) > 200 else sent
+                st.markdown(
+                    f'<div class="{css_class}">{icon} <b>[{score*100:.0f}%]</b> {display_sent}</div>',
+                    unsafe_allow_html=True
+                )
 
         has_suspicious = bool(indicators['suspicious_patterns'])
         has_credibility = bool(indicators['credibility_indicators'])
@@ -529,29 +547,25 @@ def main():
         if has_suspicious and has_credibility:
             col_sus, col_cred = st.columns(2)
             with col_sus:
-                st.markdown('<div class="result-card">', unsafe_allow_html=True)
+                with st.container(border=True):
+                    st.markdown("#### ⚠️ Suspicious Patterns Found")
+                    for pat in set(indicators['suspicious_patterns'][:10]):
+                        st.markdown(f"- 🚩 `{pat}`")
+            with col_cred:
+                with st.container(border=True):
+                    st.markdown("#### ✅ Credibility Indicators")
+                    for pat in set(indicators['credibility_indicators'][:10]):
+                        st.markdown(f"- ✅ `{pat}`")
+        elif has_suspicious:
+            with st.container(border=True):
                 st.markdown("#### ⚠️ Suspicious Patterns Found")
                 for pat in set(indicators['suspicious_patterns'][:10]):
                     st.markdown(f"- 🚩 `{pat}`")
-                st.markdown('</div>', unsafe_allow_html=True)
-            with col_cred:
-                st.markdown('<div class="result-card">', unsafe_allow_html=True)
+        elif has_credibility:
+            with st.container(border=True):
                 st.markdown("#### ✅ Credibility Indicators")
                 for pat in set(indicators['credibility_indicators'][:10]):
                     st.markdown(f"- ✅ `{pat}`")
-                st.markdown('</div>', unsafe_allow_html=True)
-        elif has_suspicious:
-            st.markdown('<div class="result-card">', unsafe_allow_html=True)
-            st.markdown("#### ⚠️ Suspicious Patterns Found")
-            for pat in set(indicators['suspicious_patterns'][:10]):
-                st.markdown(f"- 🚩 `{pat}`")
-            st.markdown('</div>', unsafe_allow_html=True)
-        elif has_credibility:
-            st.markdown('<div class="result-card">', unsafe_allow_html=True)
-            st.markdown("#### ✅ Credibility Indicators")
-            for pat in set(indicators['credibility_indicators'][:10]):
-                st.markdown(f"- ✅ `{pat}`")
-            st.markdown('</div>', unsafe_allow_html=True)
 
     elif predict_clicked:
         st.warning("⚠️ Please enter at least 50 characters of article text to analyze.")
