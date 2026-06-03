@@ -225,6 +225,50 @@ st.markdown("""
         border-top: 1px solid rgba(78, 205, 196, 0.08);
         margin-top: 3rem;
     }
+
+    /* Mobile Responsive Styles */
+    @media (max-width: 768px) {
+        .hero-header {
+            padding: 1.5rem 1rem !important;
+            margin-bottom: 1.2rem !important;
+        }
+        .hero-header h1 {
+            font-size: 1.8rem !important;
+            letter-spacing: -0.2px !important;
+        }
+        .hero-header p {
+            font-size: 0.9rem !important;
+        }
+        
+        /* Scale down verdict badge on mobile */
+        .verdict-real, .verdict-fake, .verdict-uncertain {
+            font-size: 1.1rem !important;
+            padding: 0.6rem 1.5rem !important;
+        }
+        
+        /* Adjust metric cards padding and sizes */
+        .metric-card {
+            padding: 0.9rem 0.5rem !important;
+            margin-bottom: 0.5rem !important;
+        }
+        .metric-value {
+            font-size: 1.6rem !important;
+        }
+        .metric-label {
+            font-size: 0.8rem !important;
+        }
+        
+        /* Scale down badges text slightly on mobile */
+        .badge-suspicious, .badge-credible {
+            font-size: 0.78rem !important;
+            padding: 0.2rem 0.5rem !important;
+        }
+
+        /* Adjust standard result cards padding */
+        div[data-testid="stVerticalBlockBorderWrapper"] {
+            padding: 1.2rem !important;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -292,6 +336,65 @@ def create_gauge_chart(score, title="Credibility Score"):
         font={'family': 'Inter'}
     )
     return fig
+
+
+def explain_pattern(pat):
+    """Maps raw pattern matches to user-friendly category descriptions."""
+    pat_str = str(pat).strip()
+    pat_lower = pat_str.lower()
+    
+    if pat_str.isupper() and len(pat_str) >= 5:
+        return f"Excessive Capitalization: \"{pat_str}\""
+    if "!" in pat_str:
+        return f"Excessive Exclamation: \"{pat_str}\""
+    if "?" in pat_str:
+        return f"Excessive Questioning: \"{pat_str}\""
+        
+    explanations = {
+        # Sensationalism
+        "breaking": "Clickbait Urgency",
+        "exclusive": "Clickbait Urgency",
+        "shocking": "Emotional Trigger",
+        "urgent": "Clickbait Urgency",
+        "alert": "Clickbait Urgency",
+        "exposed": "Conspiratorial Tone",
+        "revealed": "Conspiratorial Tone",
+        "leaked": "Conspiratorial Tone",
+        "secret": "Conspiratorial Tone",
+        "coverup": "Conspiratorial Tone",
+        "cover-up": "Conspiratorial Tone",
+        "you won't believe": "Clickbait Hook",
+        "they don't want you to know": "Clickbait Hook",
+        "mainstream media": "Anti-Media Rhetoric",
+        "msm": "Anti-Media Rhetoric",
+        "fake news": "Bias Accusation",
+        "deep state": "Conspiracy Theory",
+        "miracle": "Unverified Claim",
+        "cure-all": "Unverified Claim",
+        "conspiracy": "Conspiracy Rhetoric",
+        "hoax": "Unverified Claim",
+        
+        # Credibility
+        "according to": "Sourced Attribution",
+        "study finds": "Research Citation",
+        "research shows": "Research Citation",
+        "data suggests": "Data Reference",
+        "university": "Academic Reference",
+        "institute": "Institutional Citation",
+        "journal": "Academic Citation",
+        "peer-reviewed": "Peer Validation",
+        "official": "Verified Spokesperson",
+        "spokesperson": "Attributed Spokesperson",
+        "statement": "Official Statement",
+        "confirmed": "Verified Fact",
+        "evidence": "Supporting Evidence",
+        "analysis": "Analytical Reporting",
+        "statistics": "Data Reference",
+        "survey": "Data Reference"
+    }
+    
+    category = explanations.get(pat_lower, "Stylistic Pattern")
+    return f"{category} (\"{pat_str}\")"
 
 
 def predict_article(text, model, preprocessor):
@@ -372,12 +475,18 @@ def main():
             index=0,
         )
         st.markdown("---")
-        st.markdown("### 📊 About")
+        st.markdown("### 📚 Model & Dataset Info")
         st.markdown("""
         <div class="info-box">
-            This tool uses <b>NLP</b> and <b>Machine Learning</b> to analyze news articles 
-            and predict their credibility. It highlights suspicious claims and provides 
-            an explainable breakdown of the analysis.
+            This AI model analyzes news credibility using a <b>Passive-Aggressive Classifier</b> trained on a combined dataset of <b>69,957 news articles</b> with an accuracy of <b>90.14%</b>.<br><br>
+            <b>Data Sources:</b>
+            <ul style="margin-left: -15px; margin-bottom: 0px;">
+                <li><b>ISOT (Kaggle):</b> ~45,000 articles (Reuters news & flagged sources).</li>
+                <li><b>LIAR (UCSB):</b> ~10,000 PolitiFact statements.</li>
+                <li><b>COVID-19 Dataset:</b> ~8,500 claims & conspiracy tweets.</li>
+                <li><b>McIntire Dataset:</b> ~6,300 benchmark articles.</li>
+                <li><b>Google Fact Check Tools:</b> Real-time daily streams (Snopes, FactCheck.org, etc.).</li>
+            </ul>
         </div>
         """, unsafe_allow_html=True)
 
@@ -575,25 +684,25 @@ def main():
                 with st.container(border=True):
                     st.markdown("#### ⚠️ Sensational / Suspicious Words")
                     st.caption("Language styles or sensational claims commonly correlated with clickbait or unverified stories.")
-                    badges_html = "".join([f'<span class="badge-suspicious">🚩 {pat}</span>' for pat in sorted(set(indicators['suspicious_patterns'][:15]))])
+                    badges_html = "".join([f'<span class="badge-suspicious">🚩 {explain_pattern(pat)}</span>' for pat in sorted(set(indicators['suspicious_patterns'][:15]))])
                     st.markdown(f'<div style="margin-top: 0.5rem;">{badges_html}</div>', unsafe_allow_html=True)
             with col_cred:
                 with st.container(border=True):
                     st.markdown("#### 📜 Journalistic / Credibility Signals")
                     st.caption("Phrases and keywords indicating citations, official statements, and objective reporting.")
-                    badges_html = "".join([f'<span class="badge-credible">✅ {pat}</span>' for pat in sorted(set(indicators['credibility_indicators'][:15]))])
+                    badges_html = "".join([f'<span class="badge-credible">✅ {explain_pattern(pat)}</span>' for pat in sorted(set(indicators['credibility_indicators'][:15]))])
                     st.markdown(f'<div style="margin-top: 0.5rem;">{badges_html}</div>', unsafe_allow_html=True)
         elif has_suspicious:
             with st.container(border=True):
                 st.markdown("#### ⚠️ Sensational / Suspicious Words")
                 st.caption("Language styles or sensational claims commonly correlated with clickbait or unverified stories.")
-                badges_html = "".join([f'<span class="badge-suspicious">🚩 {pat}</span>' for pat in sorted(set(indicators['suspicious_patterns'][:15]))])
+                badges_html = "".join([f'<span class="badge-suspicious">🚩 {explain_pattern(pat)}</span>' for pat in sorted(set(indicators['suspicious_patterns'][:15]))])
                 st.markdown(f'<div style="margin-top: 0.5rem;">{badges_html}</div>', unsafe_allow_html=True)
         elif has_credibility:
             with st.container(border=True):
                 st.markdown("#### 📜 Journalistic / Credibility Signals")
                 st.caption("Phrases and keywords indicating citations, official statements, and objective reporting.")
-                badges_html = "".join([f'<span class="badge-credible">✅ {pat}</span>' for pat in sorted(set(indicators['credibility_indicators'][:15]))])
+                badges_html = "".join([f'<span class="badge-credible">✅ {explain_pattern(pat)}</span>' for pat in sorted(set(indicators['credibility_indicators'][:15]))])
                 st.markdown(f'<div style="margin-top: 0.5rem;">{badges_html}</div>', unsafe_allow_html=True)
 
     elif predict_clicked:
