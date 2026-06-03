@@ -45,21 +45,21 @@ class TextPreprocessor:
             self.stop_words = set(stopwords.words('english'))
 
         self.sensational_patterns = [
-            r'\b(breaking|exclusive|shocking|urgent|alert)\b',
-            r'\b(exposed|revealed|leaked|secret|coverup|cover-up)\b',
-            r'\b(you won\'t believe|they don\'t want you to know)\b',
-            r'\b(mainstream media|msm|fake news|deep state)\b',
-            r'\b(miracle|cure-all|conspiracy|hoax)\b',
-            r'!{2,}',
-            r'\?{2,}',
-            r'[A-Z]{5,}',
+            re.compile(r'\b(?:breaking|exclusive|shocking|urgent|alert)\b', re.IGNORECASE),
+            re.compile(r'\b(?:exposed|revealed|leaked|secret|coverup|cover-up)\b', re.IGNORECASE),
+            re.compile(r'\b(?:you won\'t believe|they don\'t want you to know)\b', re.IGNORECASE),
+            re.compile(r'\b(?:mainstream media|msm|fake news|deep state)\b', re.IGNORECASE),
+            re.compile(r'\b(?:miracle|cure-all|conspiracy|hoax)\b', re.IGNORECASE),
+            re.compile(r'!{2,}'),
+            re.compile(r'\?{2,}'),
+            re.compile(r'\b[A-Z]{5,}\b'), # Case-sensitive: only matches actual ALL-CAPS words!
         ]
 
         self.credibility_patterns = [
-            r'\b(according to|study finds|research shows|data suggests)\b',
-            r'\b(university|institute|journal|peer-reviewed)\b',
-            r'\b(official|spokesperson|statement|confirmed)\b',
-            r'\b(evidence|analysis|statistics|survey)\b',
+            re.compile(r'\b(?:according to|study finds|research shows|data suggests)\b', re.IGNORECASE),
+            re.compile(r'\b(?:university|institute|journal|peer-reviewed)\b', re.IGNORECASE),
+            re.compile(r'\b(?:official|spokesperson|statement|confirmed)\b', re.IGNORECASE),
+            re.compile(r'\b(?:evidence|analysis|statistics|survey)\b', re.IGNORECASE),
         ]
 
     def clean_text(self, text: str) -> str:
@@ -160,14 +160,14 @@ class TextPreprocessor:
             return results
 
         for pattern in self.sensational_patterns:
-            matches = re.findall(pattern, text, re.IGNORECASE)
+            matches = pattern.findall(text)
             if matches:
-                results['suspicious_patterns'].extend(matches)
+                results['suspicious_patterns'].extend([m for m in matches if m])
 
         for pattern in self.credibility_patterns:
-            matches = re.findall(pattern, text, re.IGNORECASE)
+            matches = pattern.findall(text)
             if matches:
-                results['credibility_indicators'].extend(matches)
+                results['credibility_indicators'].extend([m for m in matches if m])
 
         alpha_chars = [c for c in text if c.isalpha()]
         if alpha_chars:
@@ -207,7 +207,7 @@ class TextPreprocessor:
             return score
 
         for pattern in self.sensational_patterns:
-            if re.search(pattern, sentence, re.IGNORECASE):
+            if pattern.search(sentence):
                 score += 0.15
 
         alpha_chars = [c for c in sentence if c.isalpha()]
@@ -217,7 +217,7 @@ class TextPreprocessor:
                 score += 0.2
 
         for pattern in self.credibility_patterns:
-            if re.search(pattern, sentence, re.IGNORECASE):
+            if pattern.search(sentence):
                 score -= 0.1
 
         if sentence.count('!') > 1:
@@ -225,9 +225,9 @@ class TextPreprocessor:
         if sentence.count('?') > 2:
             score += 0.05
 
-        vague_patterns = [r'\b(some people say|many believe|sources say|experts claim)\b']
+        vague_patterns = [re.compile(r'\b(?:some people say|many believe|sources say|experts claim)\b', re.IGNORECASE)]
         for pattern in vague_patterns:
-            if re.search(pattern, sentence, re.IGNORECASE):
+            if pattern.search(sentence):
                 score += 0.15
 
         return max(0.0, min(score, 1.0))

@@ -192,6 +192,31 @@ st.markdown("""
         font-size: 0.9rem;
     }
 
+    .badge-suspicious {
+        background-color: rgba(224, 96, 96, 0.12) !important;
+        color: #f07070 !important;
+        border: 1px solid rgba(224, 96, 96, 0.25) !important;
+        padding: 0.25rem 0.6rem !important;
+        border-radius: 6px !important;
+        font-size: 0.85rem !important;
+        font-weight: 500 !important;
+        display: inline-block !important;
+        margin: 0.2rem !important;
+        font-family: 'Inter', sans-serif !important;
+    }
+    .badge-credible {
+        background-color: rgba(79, 209, 165, 0.12) !important;
+        color: #4fd1a5 !important;
+        border: 1px solid rgba(79, 209, 165, 0.25) !important;
+        padding: 0.25rem 0.6rem !important;
+        border-radius: 6px !important;
+        font-size: 0.85rem !important;
+        font-weight: 500 !important;
+        display: inline-block !important;
+        margin: 0.2rem !important;
+        font-family: 'Inter', sans-serif !important;
+    }
+
     .footer {
         text-align: center;
         color: #5e7a8f;
@@ -548,24 +573,28 @@ def main():
             col_sus, col_cred = st.columns(2)
             with col_sus:
                 with st.container(border=True):
-                    st.markdown("#### ⚠️ Suspicious Patterns Found")
-                    for pat in set(indicators['suspicious_patterns'][:10]):
-                        st.markdown(f"- 🚩 `{pat}`")
+                    st.markdown("#### ⚠️ Sensational / Suspicious Words")
+                    st.caption("Language styles or sensational claims commonly correlated with clickbait or unverified stories.")
+                    badges_html = "".join([f'<span class="badge-suspicious">🚩 {pat}</span>' for pat in sorted(set(indicators['suspicious_patterns'][:15]))])
+                    st.markdown(f'<div style="margin-top: 0.5rem;">{badges_html}</div>', unsafe_allow_html=True)
             with col_cred:
                 with st.container(border=True):
-                    st.markdown("#### ✅ Credibility Indicators")
-                    for pat in set(indicators['credibility_indicators'][:10]):
-                        st.markdown(f"- ✅ `{pat}`")
+                    st.markdown("#### 📜 Journalistic / Credibility Signals")
+                    st.caption("Phrases and keywords indicating citations, official statements, and objective reporting.")
+                    badges_html = "".join([f'<span class="badge-credible">✅ {pat}</span>' for pat in sorted(set(indicators['credibility_indicators'][:15]))])
+                    st.markdown(f'<div style="margin-top: 0.5rem;">{badges_html}</div>', unsafe_allow_html=True)
         elif has_suspicious:
             with st.container(border=True):
-                st.markdown("#### ⚠️ Suspicious Patterns Found")
-                for pat in set(indicators['suspicious_patterns'][:10]):
-                    st.markdown(f"- 🚩 `{pat}`")
+                st.markdown("#### ⚠️ Sensational / Suspicious Words")
+                st.caption("Language styles or sensational claims commonly correlated with clickbait or unverified stories.")
+                badges_html = "".join([f'<span class="badge-suspicious">🚩 {pat}</span>' for pat in sorted(set(indicators['suspicious_patterns'][:15]))])
+                st.markdown(f'<div style="margin-top: 0.5rem;">{badges_html}</div>', unsafe_allow_html=True)
         elif has_credibility:
             with st.container(border=True):
-                st.markdown("#### ✅ Credibility Indicators")
-                for pat in set(indicators['credibility_indicators'][:10]):
-                    st.markdown(f"- ✅ `{pat}`")
+                st.markdown("#### 📜 Journalistic / Credibility Signals")
+                st.caption("Phrases and keywords indicating citations, official statements, and objective reporting.")
+                badges_html = "".join([f'<span class="badge-credible">✅ {pat}</span>' for pat in sorted(set(indicators['credibility_indicators'][:15]))])
+                st.markdown(f'<div style="margin-top: 0.5rem;">{badges_html}</div>', unsafe_allow_html=True)
 
     elif predict_clicked:
         st.warning("⚠️ Please enter at least 50 characters of article text to analyze.")
