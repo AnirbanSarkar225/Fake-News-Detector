@@ -436,9 +436,34 @@ def main():
                 verdict_text = "⚠️ UNCERTAIN"
                 verdict_desc = "The model is **uncertain** about this article. Verify with trusted sources."
 
+            # Determine correctness level label
+            cred_pct = results['credibility'] * 100
+            if cred_pct >= 80:
+                level_label = "Very High Credibility"
+                level_color = "#4fd1a5"
+            elif cred_pct >= 60:
+                level_label = "High Credibility"
+                level_color = "#7ccf8e"
+            elif cred_pct >= 40:
+                level_label = "Moderate Credibility"
+                level_color = "#f0b060"
+            elif cred_pct >= 20:
+                level_label = "Low Credibility"
+                level_color = "#e88050"
+            else:
+                level_label = "Very Low Credibility"
+                level_color = "#f07070"
+
             st.markdown(f'<div style="text-align:center;margin:1.5rem 0;">'
                         f'<span class="{verdict_class}">{verdict_text}</span></div>',
                         unsafe_allow_html=True)
+            st.markdown(f"""
+            <div style="text-align:center;margin:1rem 0;">
+                <span style="font-size:2rem;font-weight:700;color:{level_color};">{cred_pct:.1f}%</span>
+                <br>
+                <span style="font-size:0.95rem;color:{level_color};font-weight:600;">{level_label}</span>
+            </div>
+            """, unsafe_allow_html=True)
             st.markdown(verdict_desc)
             st.markdown(f"**Model Confidence:** {conf*100:.1f}%")
             st.markdown('</div>', unsafe_allow_html=True)
@@ -498,28 +523,35 @@ def main():
             )
         st.markdown('</div>', unsafe_allow_html=True)
 
-        if indicators['suspicious_patterns'] or indicators['credibility_indicators']:
-            col_sus, col_cred = st.columns(2)
+        has_suspicious = bool(indicators['suspicious_patterns'])
+        has_credibility = bool(indicators['credibility_indicators'])
 
+        if has_suspicious and has_credibility:
+            col_sus, col_cred = st.columns(2)
             with col_sus:
                 st.markdown('<div class="result-card">', unsafe_allow_html=True)
                 st.markdown("#### ⚠️ Suspicious Patterns Found")
-                if indicators['suspicious_patterns']:
-                    for pat in set(indicators['suspicious_patterns'][:10]):
-                        st.markdown(f"- 🚩 `{pat}`")
-                else:
-                    st.markdown("_No suspicious patterns detected._")
+                for pat in set(indicators['suspicious_patterns'][:10]):
+                    st.markdown(f"- 🚩 `{pat}`")
                 st.markdown('</div>', unsafe_allow_html=True)
-
             with col_cred:
                 st.markdown('<div class="result-card">', unsafe_allow_html=True)
                 st.markdown("#### ✅ Credibility Indicators")
-                if indicators['credibility_indicators']:
-                    for pat in set(indicators['credibility_indicators'][:10]):
-                        st.markdown(f"- ✅ `{pat}`")
-                else:
-                    st.markdown("_No credibility indicators found._")
+                for pat in set(indicators['credibility_indicators'][:10]):
+                    st.markdown(f"- ✅ `{pat}`")
                 st.markdown('</div>', unsafe_allow_html=True)
+        elif has_suspicious:
+            st.markdown('<div class="result-card">', unsafe_allow_html=True)
+            st.markdown("#### ⚠️ Suspicious Patterns Found")
+            for pat in set(indicators['suspicious_patterns'][:10]):
+                st.markdown(f"- 🚩 `{pat}`")
+            st.markdown('</div>', unsafe_allow_html=True)
+        elif has_credibility:
+            st.markdown('<div class="result-card">', unsafe_allow_html=True)
+            st.markdown("#### ✅ Credibility Indicators")
+            for pat in set(indicators['credibility_indicators'][:10]):
+                st.markdown(f"- ✅ `{pat}`")
+            st.markdown('</div>', unsafe_allow_html=True)
 
     elif predict_clicked:
         st.warning("⚠️ Please enter at least 50 characters of article text to analyze.")
