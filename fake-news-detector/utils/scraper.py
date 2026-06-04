@@ -1,24 +1,26 @@
 """
 Article Scraper Module for Fake News Detector.
 
-Extracts article text, metadata, and content from URLs
-using Newspaper3k library with enhanced headers to avoid blocks.
-Falls back to requests + BeautifulSoup when Newspaper3k fails.
+Extracts article text, metadata, and content from URLs.
+Uses a multi-fallback strategy:
+  1. Newspaper3k with browser-like config
+  2. Manual requests download → Newspaper3k parse
+  3. Google Webcache mirror
+  4. Wayback Machine (Internet Archive) snapshot
 """
 
+import re
 import requests
 from newspaper import Article, ArticleException, Config
+from urllib.parse import quote_plus
 
 
 class ArticleScraper:
     """
     Web article scraper that extracts full text and metadata from news URLs.
-    
-    Uses Newspaper3k for intelligent article parsing and extraction.
-    Falls back to requests download + Newspaper3k parse if direct download fails.
+    Multiple fallback strategies to handle sites that block automated access.
     """
 
-    # Realistic browser User-Agent to avoid 401/403 blocks from news sites
     USER_AGENT = (
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
         'AppleWebKit/537.36 (KHTML, like Gecko) '
@@ -26,6 +28,7 @@ class ArticleScraper:
     )
 
     def __init__(self):
+        # Full browser-like headers
         self.headers = {
             'User-Agent': self.USER_AGENT,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -37,46 +40,81 @@ class ArticleScraper:
             'Sec-Fetch-Mode': 'navigate',
             'Sec-Fetch-Site': 'none',
             'Sec-Fetch-User': '?1',
+            'DNT': '1',
+            'Cache-Control': 'max-age=0',
         }
 
-        # Configure Newspaper3k to use our custom User-Agent
+        # Newspaper3k config
         self.config = Config()
         self.config.browser_user_agent = self.USER_AGENT
         self.config.request_timeout = 20
-        self.config.fetch_images = False          # speed up; we don't need images
+        self.config.fetch_images = False
 
-    def _download_html_manually(self, url: str) -> str:
-        """
-        Download the raw HTML of a page using requests with full browser headers.
-        This avoids the 401/403 errors that newspaper3k's default downloader gets.
-        """
-        resp = requests.get(url, headers=self.headers, timeout=20, allow_redirects=True)
+        # Persistent session for cookies
+        self.session = requests.Session()
+        self.session.headers.update(self.headers)
+
+    def _download_with_requests(self, url: str) -> str:
+        """Download HTML using requests with full browser headers + session cookies."""
+        resp = self.session.get(url, timeout=20, allow_redirects=True)
         resp.raise_for_status()
+        resp.encoding = resp.apparent_encoding or 'utf-8'
         return resp.text
+
+    def _try_google_cache(self, url: str) -> str:
+        """Try fetching the page from Google's webcache mirror."""
+        cache_url = f"https://webcache.googleusercontent.com/search?q=cache:{quote_plus(url)}"
+        resp = self.session.get(cache_url, timeout=15, allow_redirects=True)
+        resp.raise_for_status()
+        resp.encoding = resp.apparent_encoding or 'utf-8'
+        return resp.text
+
+    def _try_wayback_machine(self, url: str) -> str:
+        """Try fetching the latest snapshot from the Wayback Machine."""
+        api_url = f"https://archive.org/wayback/available?url={quote_plus(url)}"
+        api_resp = self.session.get(api_url, timeout=10)
+        api_resp.raise_for_status()
+        data = api_resp.json()
+
+        snapshots = data.get("archived_snapshots", {})
+        closest = snapshots.get("closest", {})
+        if closest.get("available") and closest.get("url"):
+            snap_url = closest["url"]
+            resp = self.session.get(snap_url, timeout=20, allow_redirects=True)
+            resp.raise_for_status()
+            resp.encoding = resp.apparent_encoding or 'utf-8'
+            return resp.text
+
+        raise ValueError("No Wayback Machine snapshot available")
+
+    def _parse_html_with_newspaper(self, url: str, html: str) -> dict:
+        """Parse downloaded HTML using Newspaper3k and return extracted fields."""
+        article = Article(url, config=self.config)
+        article.set_html(html)
+        article.parse()
+
+        try:
+            article.nlp()
+            summary = article.summary or ''
+        except Exception:
+            summary = ''
+
+        return {
+            'title': article.title or '',
+            'text': article.text or '',
+            'authors': article.authors or [],
+            'publish_date': article.publish_date.strftime('%Y-%m-%d') if article.publish_date else None,
+            'top_image': article.top_image or '',
+            'summary': summary,
+        }
 
     def extract_from_url(self, url: str) -> dict:
         """
-        Extract article content and metadata from a given URL.
-
-        Strategy:
-          1. Try Newspaper3k with custom config (browser UA).
-          2. If that fails (401/403), manually download HTML with requests,
-             then feed it to Newspaper3k for parsing.
-
-        Args:
-            url: Full URL of the news article
+        Extract article content from a URL with multiple fallback strategies.
 
         Returns:
-            Dictionary containing:
-                - success (bool): Whether extraction succeeded
-                - title (str): Article title
-                - text (str): Full article text
-                - authors (list): List of author names
-                - publish_date (str): Publication date
-                - top_image (str): URL of the article's main image
-                - summary (str): Auto-generated summary
-                - source_url (str): The source domain
-                - error (str): Error message if failed
+            Dictionary with success, title, text, authors, publish_date,
+            top_image, summary, source_url, error, and fetch_method.
         """
         result = {
             'success': False,
@@ -87,112 +125,114 @@ class ArticleScraper:
             'top_image': '',
             'summary': '',
             'source_url': url,
-            'error': ''
+            'error': '',
+            'fetch_method': '',
         }
 
+        if not url.startswith(('http://', 'https://')):
+            url = 'https://' + url
+
+        errors_log = []
+
+        # ── Strategy 1: Newspaper3k direct download ──
         try:
-            if not url.startswith(('http://', 'https://')):
-                url = 'https://' + url
-
             article = Article(url, config=self.config)
-
-            # --- Attempt 1: let Newspaper3k download with our custom config ---
-            try:
-                article.download()
-            except Exception:
-                # --- Attempt 2: download HTML ourselves, feed to Newspaper3k ---
-                html = self._download_html_manually(url)
-                article.set_html(html)
-
+            article.download()
             article.parse()
-
             try:
                 article.nlp()
                 result['summary'] = article.summary or ''
             except Exception:
-                result['summary'] = ''
+                pass
 
             result['title'] = article.title or ''
             result['text'] = article.text or ''
             result['authors'] = article.authors or []
             result['top_image'] = article.top_image or ''
-
             if article.publish_date:
                 result['publish_date'] = article.publish_date.strftime('%Y-%m-%d')
 
-            if result['text'] and len(result['text']) > 50:
+            if result['text'] and len(result['text'].strip()) > 50:
                 result['success'] = True
+                result['fetch_method'] = 'Direct download'
+                return result
             else:
-                # One more fallback: try manual download if newspaper got no text
-                if not result['text'] or len(result['text']) <= 50:
-                    try:
-                        html = self._download_html_manually(url)
-                        article2 = Article(url, config=self.config)
-                        article2.set_html(html)
-                        article2.parse()
-                        if article2.text and len(article2.text) > 50:
-                            result['text'] = article2.text
-                            result['title'] = article2.title or result['title']
-                            result['authors'] = article2.authors or result['authors']
-                            if article2.publish_date:
-                                result['publish_date'] = article2.publish_date.strftime('%Y-%m-%d')
-                            result['success'] = True
-                        else:
-                            result['error'] = (
-                                'Could not extract enough article text. '
-                                'The site may use heavy JavaScript rendering. '
-                                'Try pasting the article text directly instead.'
-                            )
-                    except Exception:
-                        result['error'] = (
-                            'Could not extract enough article text. '
-                            'Try pasting the article text directly instead.'
-                        )
-
-        except ArticleException as e:
-            result['error'] = f'Failed to parse article: {str(e)}'
-        except requests.exceptions.HTTPError as e:
-            status = e.response.status_code if e.response is not None else 'unknown'
-            if status in (401, 403):
-                result['error'] = (
-                    f'The website blocked automated access (HTTP {status}). '
-                    'This is common for paywalled or protected sites like Reuters. '
-                    'Please copy-paste the article text directly instead.'
-                )
-            else:
-                result['error'] = f'HTTP error {status} when fetching the article.'
-        except requests.exceptions.ConnectionError:
-            result['error'] = 'Could not connect to the website. Check the URL and your internet connection.'
-        except requests.exceptions.Timeout:
-            result['error'] = 'The request timed out. The website may be slow or unresponsive.'
-        except requests.exceptions.RequestException as e:
-            result['error'] = f'Network error: {str(e)}'
+                errors_log.append("Newspaper3k: extracted text too short")
         except Exception as e:
-            result['error'] = f'Unexpected error: {str(e)}'
+            errors_log.append(f"Newspaper3k: {e}")
+
+        # ── Strategy 2: Manual requests download → Newspaper3k parse ──
+        try:
+            html = self._download_with_requests(url)
+            parsed = self._parse_html_with_newspaper(url, html)
+            if parsed['text'] and len(parsed['text'].strip()) > 50:
+                result.update(parsed)
+                result['source_url'] = url
+                result['success'] = True
+                result['fetch_method'] = 'Requests fallback'
+                return result
+            else:
+                errors_log.append("Requests fallback: extracted text too short")
+        except Exception as e:
+            errors_log.append(f"Requests fallback: {e}")
+
+        # ── Strategy 3: Google Webcache ──
+        try:
+            html = self._try_google_cache(url)
+            parsed = self._parse_html_with_newspaper(url, html)
+            if parsed['text'] and len(parsed['text'].strip()) > 50:
+                result.update(parsed)
+                result['source_url'] = url
+                result['success'] = True
+                result['fetch_method'] = 'Google Cache'
+                return result
+            else:
+                errors_log.append("Google Cache: extracted text too short")
+        except Exception as e:
+            errors_log.append(f"Google Cache: {e}")
+
+        # ── Strategy 4: Wayback Machine ──
+        try:
+            html = self._try_wayback_machine(url)
+            parsed = self._parse_html_with_newspaper(url, html)
+            if parsed['text'] and len(parsed['text'].strip()) > 50:
+                result.update(parsed)
+                result['source_url'] = url
+                result['success'] = True
+                result['fetch_method'] = 'Wayback Machine'
+                return result
+            else:
+                errors_log.append("Wayback Machine: extracted text too short")
+        except Exception as e:
+            errors_log.append(f"Wayback Machine: {e}")
+
+        # ── All strategies failed ──
+        is_auth_error = any(
+            term in str(errors_log).lower()
+            for term in ['401', '403', 'forbidden', 'unauthorized', 'captcha']
+        )
+
+        if is_auth_error:
+            result['error'] = (
+                'This website blocks automated access (common for paywalled '
+                'sites like Reuters, NYT, WSJ). Please copy-paste the article '
+                'text directly using the "📝 Paste Article Text" mode in the sidebar.'
+            )
+        else:
+            result['error'] = (
+                'Could not extract article text after trying multiple methods. '
+                'The site may require JavaScript or login. '
+                'Please copy-paste the article text directly instead.'
+            )
 
         return result
 
     def validate_url(self, url: str) -> bool:
-        """
-        Quick validation to check if a URL is accessible.
-
-        Args:
-            url: URL to validate
-
-        Returns:
-            True if URL is accessible, False otherwise
-        """
+        """Quick validation to check if a URL is accessible."""
         try:
             if not url.startswith(('http://', 'https://')):
                 url = 'https://' + url
-
-            response = requests.head(
-                url,
-                headers=self.headers,
-                timeout=10,
-                allow_redirects=True
-            )
+            response = self.session.head(url, timeout=10, allow_redirects=True)
             return response.status_code < 400
-
         except Exception:
             return False

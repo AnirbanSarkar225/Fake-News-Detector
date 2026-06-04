@@ -21,6 +21,24 @@ import joblib
 import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
+import base64
+import json
+import random
+import re
+
+def get_base64_logo():
+    """Load local logo and return as base64 data URI."""
+    logo_path = os.path.join(SCRIPT_DIR, "assets", "logo.png")
+    if os.path.exists(logo_path):
+        try:
+            with open(logo_path, "rb") as image_file:
+                encoded = base64.b64encode(image_file.read()).decode()
+                return f"data:image/png;base64,{encoded}"
+        except Exception:
+            pass
+    return ""
+
+logo_base64 = get_base64_logo()
 
 sys.path.insert(0, SCRIPT_DIR)
 from utils.preprocess import TextPreprocessor
@@ -35,236 +53,602 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;550&display=swap');
+
+    /* ══════════════════════════════════════════════════════════
+       DESIGN TOKENS — Warm Clay + Brass + Organic Obsidian (70/30)
+       ══════════════════════════════════════════════════════════ */
+    :root {
+        /* Deep warm obsidian theme */
+        --bg-deep:         #090706; /* Warm stone-black */
+        --bg-mid:          #120f0e; /* Obsidian dark grey */
+        --bg-surface:      #1a1614; /* Deep earth charcoal */
+
+        /* Glass surfaces & layers */
+        --glass-bg:        linear-gradient(135deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0.005) 100%);
+        --glass-bg-hover:  linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.01) 100%);
+        --glass-bg-strong: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.015) 100%);
+        --glass-border:    rgba(255, 255, 255, 0.05);
+        --glass-highlight: rgba(255, 255, 255, 0.1);
+        --glass-blur:      blur(20px) saturate(120%);
+        --glass-blur-lg:   blur(30px) saturate(140%);
+
+        /* Font typography & scaling */
+        --font-heading:    'Space Grotesk', 'Inter', sans-serif;
+        --font-body:       'Inter', -apple-system, sans-serif;
+        --font-mono:       'JetBrains Mono', monospace;
+
+        /* Text colors - warm sand and cream */
+        --text-primary:    #f5f2eb; /* Cream */
+        --text-secondary:  #beb3a6; /* Warm Sand */
+        --text-muted:      #7c7165; /* Muted Clay-grey */
+        
+        /* Curated Human-Crafted Warm Colors (Clay, Brass, Sage) */
+        --accent:          #e15b3e; /* Clay Red / Terracotta */
+        --accent-glow:     rgba(225, 91, 62, 0.25);
+        --brass:           #d49b4c; /* Warm Brass / Gold */
+        --brass-glow:      rgba(212, 155, 76, 0.2);
+        --purple:          #b45309; /* Deep Copper/Amber */
+        --purple-glow:     rgba(180, 83, 9, 0.15);
+        
+        /* Semantic */
+        --success:         #5f8a6b; /* Sage/Forest Green */
+        --success-bg:      rgba(95, 138, 107, 0.08);
+        --success-border:  rgba(95, 138, 107, 0.25);
+        --danger:          #d45d4e; /* Terracotta Red */
+        --danger-bg:       rgba(212, 93, 78, 0.08);
+        --danger-border:   rgba(212, 93, 78, 0.25);
+        --warning:         #d49b4c; /* Brass Amber */
+        --warning-bg:      rgba(212, 155, 76, 0.08);
+        --warning-border:  rgba(212, 155, 76, 0.25);
+
+        /* Skeuomorphic depth tokens (70% depth) */
+        --shadow-recessed: inset 0 3px 10px rgba(0,0,0,0.85), inset 0 1px 2px rgba(255,255,255,0.03);
+        --shadow-beveled:  0 10px 30px rgba(0,0,0,0.6), 
+                           inset 0 1px 0 rgba(255, 255, 255, 0.15), 
+                           inset 1px 0 0 rgba(255, 255, 255, 0.08),
+                           inset 0 -1px 0 rgba(0,0,0,0.5);
+        --shadow-knob:     0 4px 10px rgba(0,0,0,0.4), 
+                           inset 0 1px 0 rgba(255,255,255,0.3), 
+                           inset 0 -2px 3px rgba(0,0,0,0.35);
+    }
+
+    /* Landing page & Login styling */
+    .landing-hero {
+        text-align: center;
+        padding: 3rem 1.5rem 1.5rem 1.5rem;
+        margin-bottom: 1rem;
+    }
+    .landing-hero h1 {
+        font-size: 3rem !important;
+        font-weight: 800;
+        line-height: 1.2;
+        background: linear-gradient(135deg, #d35230, #c68b3f, #d5c9ba) !important;
+        -webkit-background-clip: text !important;
+        -webkit-text-fill-color: transparent !important;
+    }
+    .landing-hero p {
+        font-size: 1.15rem !important;
+        color: var(--text-secondary) !important;
+        margin-top: 0.8rem;
+    }
+    
+    /* ══════════════════════════════════════════════════════════
+       GLOBAL APPLICATION FRAMEWORK
+       ══════════════════════════════════════════════════════════ */
+    html {
+        scroll-behavior: smooth !important;
+    }
 
     .stApp {
-        font-family: 'Inter', sans-serif;
+        font-family: var(--font-body) !important;
+        color: var(--text-primary) !important;
+        /* Immersive clay-brass liquid embers canvas */
+        background:
+            linear-gradient(rgba(255, 255, 255, 0.004) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 255, 255, 0.004) 1px, transparent 1px),
+            radial-gradient(circle at 10% 20%, rgba(212, 155, 76, 0.05) 0%, transparent 45%),
+            radial-gradient(circle at 85% 35%, rgba(225, 91, 62, 0.04) 0%, transparent 45%),
+            radial-gradient(circle at 50% 80%, rgba(95, 138, 107, 0.04) 0%, transparent 55%),
+            linear-gradient(180deg, #090706 0%, #120f0e 45%, #080605 100%) !important;
+        background-size: 24px 24px, 24px 24px, 100% 100%, 100% 100%, 100% 100%, 100% 100% !important;
+        background-attachment: fixed !important;
     }
 
+    /* Expand workspace width to avoid blank/sparse look */
+    [data-testid="block-container"] {
+        padding-top: 2rem !important;
+        padding-bottom: 2rem !important;
+        padding-left: 5% !important;
+        padding-right: 5% !important;
+        max-width: 92% !important;
+    }
+
+    /* Scroll/Fade animations on page elements */
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+            filter: blur(4px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+            filter: blur(0);
+        }
+    }
+    
     .hero-header {
-        background: linear-gradient(135deg, #0d1b2a 0%, #1b2d45 50%, #162a3e 100%);
-        padding: 2.5rem 2rem;
+        animation: fadeInUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    
+    [data-testid="stSidebarUserContent"] {
+        animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    /* Standardized text color rules */
+    .stApp p, .stApp li, .stApp span, .stApp label,
+    .stApp [data-testid="stMarkdownContainer"] p {
+        color: var(--text-primary) !important;
+    }
+    .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5 {
+        font-family: var(--font-heading) !important;
+        color: var(--text-primary) !important;
+        letter-spacing: -0.3px;
+    }
+    .stApp .stCaption, .stApp [data-testid="stCaptionContainer"] * {
+        color: var(--text-secondary) !important;
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       HERO PANEL — Premium Liquid Glass Banner (Warm Clay & Gold)
+       ══════════════════════════════════════════════════════════ */
+    .hero-header {
+        background: var(--glass-bg-strong);
+        backdrop-filter: var(--glass-blur-lg);
+        -webkit-backdrop-filter: var(--glass-blur-lg);
+        padding: 3rem 2rem 2.5rem;
         border-radius: 20px;
-        margin-bottom: 2rem;
+        margin-bottom: 2.2rem;
         text-align: center;
-        border: 1px solid rgba(78, 205, 196, 0.12);
-        box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+        /* Skeuomorphic beveled glass borders */
+        border: 1px solid var(--glass-border) !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.16) !important;
+        border-left: 1px solid rgba(255, 255, 255, 0.08) !important;
+        box-shadow:
+            0 15px 35px rgba(0,0,0,0.5),
+            inset 0 1px 0 rgba(255,255,255,0.15),
+            inset 0 -1px 0 rgba(0,0,0,0.4),
+            inset 0 0 50px rgba(212, 155, 76, 0.02);
+        position: relative;
+        overflow: hidden;
+    }
+    /* Liquid highlight reflections */
+    .hero-header::before {
+        content: '';
+        position: absolute;
+        top: 0; left: -50%; right: -50%;
+        height: 50%;
+        background: linear-gradient(180deg,
+            rgba(255,255,255,0.1) 0%,
+            rgba(255,255,255,0.03) 40%,
+            transparent 100%);
+        border-radius: 50%;
+        pointer-events: none;
     }
     .hero-header h1 {
-        background: linear-gradient(135deg, #4ecdc4, #7c8cf0, #a78bfa);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-size: 2.4rem;
+        background: linear-gradient(135deg, #e15b3e, #d49b4c, #beb3a6) !important;
+        -webkit-background-clip: text !important;
+        -webkit-text-fill-color: transparent !important;
+        font-size: 2.5rem;
         font-weight: 800;
-        margin-bottom: 0.5rem;
-        letter-spacing: -0.5px;
+        margin-bottom: 0.2rem;
+        filter: drop-shadow(0 2px 5px rgba(0,0,0,0.4));
     }
     .hero-header p {
-        color: #8ba3b8;
-        font-size: 1.05rem;
-        font-weight: 300;
+        color: var(--text-secondary) !important;
+        font-size: 1rem;
+        font-weight: 500;
+        letter-spacing: 0.5px;
+    }
+    .hero-divider {
+        width: 80px;
+        height: 4px;
+        background: linear-gradient(90deg, var(--accent), var(--brass));
+        margin: 0.8rem auto;
+        border-radius: 10px;
+        box-shadow: 0 0 15px var(--accent-glow);
     }
 
-    .result-card, div[data-testid="stVerticalBlockBorderWrapper"] {
-        background: linear-gradient(145deg, #1b2d45, #213a54) !important;
+    /* ══════════════════════════════════════════════════════════
+       CONTROL PANEL SIDEBAR — Slate Brushed Metallic Obsidian
+       ══════════════════════════════════════════════════════════ */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(185deg, #090706 0%, #161210 60%, #0c0908 100%) !important;
+        border-right: 1px solid rgba(255,255,255,0.03) !important;
+        box-shadow: inset -5px 0 15px rgba(0,0,0,0.6), 5px 0 25px rgba(0,0,0,0.5) !important;
+    }
+    [data-testid="stSidebar"] *, [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] span, [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] li {
+        color: #beb3a6 !important;
+    }
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3, [data-testid="stSidebar"] h4 {
+        color: var(--text-primary) !important;
+        font-family: var(--font-heading) !important;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    }
+    [data-testid="stSidebar"] hr {
+        border-color: rgba(255,255,255,0.04) !important;
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       GLASS CONSOLE CARDS — Heavy specular 3D panels
+       ══════════════════════════════════════════════════════════ */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background: var(--glass-bg) !important;
+        backdrop-filter: var(--glass-blur) !important;
+        -webkit-backdrop-filter: var(--glass-blur) !important;
         border-radius: 16px !important;
         padding: 1.8rem !important;
         margin: 1rem 0 !important;
-        border: 1px solid rgba(78, 205, 196, 0.08) !important;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.18) !important;
+        /* Specular light border */
+        border: 1px solid var(--glass-border) !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+        border-left: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-bottom: 1px solid rgba(0,0,0,0.4) !important;
+        border-right: 1px solid rgba(0,0,0,0.3) !important;
+        box-shadow:
+            var(--shadow-beveled),
+            inset 0 0 25px rgba(255,255,255,0.01) !important;
+        transition: transform 0.25s ease, box-shadow 0.25s ease !important;
+        animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
     }
-    .result-card h3, div[data-testid="stVerticalBlockBorderWrapper"] h3 {
-        color: #d0dce6 !important;
-        font-weight: 600 !important;
+    div[data-testid="stVerticalBlockBorderWrapper"]:hover {
+        transform: translateY(-2px);
+        box-shadow:
+            0 15px 35px rgba(0,0,0,0.6), 
+            inset 0 1px 0 rgba(255,255,255,0.2), 
+            inset 1px 0 0 rgba(255,255,255,0.1),
+            inset 0 -1px 0 rgba(0,0,0,0.45) !important;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"] h3,
+    div[data-testid="stVerticalBlockBorderWrapper"] h4 {
+        color: var(--text-primary) !important;
+        font-family: var(--font-heading) !important;
+        font-weight: 700 !important;
         margin-bottom: 1rem !important;
-        font-size: 1.15rem !important;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.4);
     }
 
+    /* ══════════════════════════════════════════════════════════
+       VERDICT STAMPS — 3D Bulging Clay Glass Seals
+       ══════════════════════════════════════════════════════════ */
     .verdict-real {
-        background: linear-gradient(135deg, #3dbaa2, #4fd1a5);
-        color: #0d1b2a;
-        padding: 0.8rem 2rem;
-        border-radius: 50px;
-        font-weight: 700;
-        font-size: 1.3rem;
+        background: linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 50%, rgba(0,0,0,0.2) 100%), linear-gradient(135deg, #5f8a6b, #45674f) !important;
+        color: #f5f2eb !important;
+        padding: 0.85rem 2.2rem;
+        border-radius: 12px;
+        font-family: var(--font-heading);
+        font-weight: 800;
+        font-size: 1.2rem;
         display: inline-block;
-        box-shadow: 0 4px 20px rgba(61,186,162,0.3);
-        letter-spacing: 1px;
+        border: 1px solid rgba(255,255,255,0.2);
+        border-top: 1px solid rgba(255,255,255,0.3);
+        box-shadow:
+            0 10px 25px rgba(95, 138, 107, 0.35),
+            0 2px 4px rgba(0,0,0,0.3),
+            inset 0 1px 0 rgba(255,255,255,0.25),
+            inset 0 -2px 5px rgba(0,0,0,0.3);
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        text-shadow: 0 -1px 1px rgba(0,0,0,0.3), 0 1px 2px rgba(255,255,255,0.15);
     }
     .verdict-fake {
-        background: linear-gradient(135deg, #e06060, #f07070);
-        color: #fff;
-        padding: 0.8rem 2rem;
-        border-radius: 50px;
-        font-weight: 700;
-        font-size: 1.3rem;
+        background: linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 50%, rgba(0,0,0,0.2) 100%), linear-gradient(135deg, #d45d4e, #b83d2f) !important;
+        color: #f5f2eb !important;
+        padding: 0.85rem 2.2rem;
+        border-radius: 12px;
+        font-family: var(--font-heading);
+        font-weight: 800;
+        font-size: 1.2rem;
         display: inline-block;
-        box-shadow: 0 4px 20px rgba(224,96,96,0.3);
-        letter-spacing: 1px;
+        border: 1px solid rgba(255,255,255,0.2);
+        border-top: 1px solid rgba(255,255,255,0.3);
+        box-shadow:
+            0 10px 25px rgba(212, 93, 78, 0.35),
+            0 2px 4px rgba(0,0,0,0.3),
+            inset 0 1px 0 rgba(255,255,255,0.25),
+            inset 0 -2px 5px rgba(0,0,0,0.3);
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        text-shadow: 0 -1px 1px rgba(0,0,0,0.3), 0 1px 2px rgba(255,255,255,0.1);
     }
     .verdict-uncertain {
-        background: linear-gradient(135deg, #e0a040, #f0b060);
-        color: #0d1b2a;
-        padding: 0.8rem 2rem;
-        border-radius: 50px;
-        font-weight: 700;
-        font-size: 1.3rem;
+        background: linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 50%, rgba(0,0,0,0.2) 100%), linear-gradient(135deg, #d49b4c, #b07e38) !important;
+        color: #f5f2eb !important;
+        padding: 0.85rem 2.2rem;
+        border-radius: 12px;
+        font-family: var(--font-heading);
+        font-weight: 800;
+        font-size: 1.2rem;
         display: inline-block;
-        box-shadow: 0 4px 20px rgba(224,160,64,0.3);
-        letter-spacing: 1px;
+        border: 1px solid rgba(255,255,255,0.2);
+        border-top: 1px solid rgba(255,255,255,0.3);
+        box-shadow:
+            0 10px 25px rgba(212, 155, 76, 0.35),
+            0 2px 4px rgba(0,0,0,0.3),
+            inset 0 1px 0 rgba(255,255,255,0.25),
+            inset 0 -2px 5px rgba(0,0,0,0.3);
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        text-shadow: 0 -1px 1px rgba(0,0,0,0.3), 0 1px 2px rgba(255,255,255,0.15);
     }
 
+    /* ══════════════════════════════════════════════════════════
+       SENTENCE TRACKS — Inset physical clay/stone slots
+       ══════════════════════════════════════════════════════════ */
     .sentence-high {
-        background: rgba(224,96,96,0.12);
-        border-left: 3px solid #f07070;
-        padding: 0.6rem 1rem;
-        margin: 0.4rem 0;
-        border-radius: 0 8px 8px 0;
-        color: #d0dce6;
+        background: rgba(212, 93, 78, 0.05);
+        border-left: 4px solid var(--danger);
+        padding: 0.8rem 1.2rem;
+        margin: 0.6rem 0;
+        border-radius: 4px 12px 12px 4px;
+        color: var(--text-primary);
         font-size: 0.92rem;
+        border-top: 1px solid rgba(255,255,255,0.02);
+        box-shadow: var(--shadow-recessed);
+        text-shadow: 0 1px 2px rgba(0,0,0,0.4);
     }
     .sentence-medium {
-        background: rgba(240,176,96,0.10);
-        border-left: 3px solid #f0b060;
-        padding: 0.6rem 1rem;
-        margin: 0.4rem 0;
-        border-radius: 0 8px 8px 0;
-        color: #d0dce6;
+        background: rgba(212, 155, 76, 0.05);
+        border-left: 4px solid var(--warning);
+        padding: 0.8rem 1.2rem;
+        margin: 0.6rem 0;
+        border-radius: 4px 12px 12px 4px;
+        color: var(--text-primary);
         font-size: 0.92rem;
+        border-top: 1px solid rgba(255,255,255,0.02);
+        box-shadow: var(--shadow-recessed);
+        text-shadow: 0 1px 2px rgba(0,0,0,0.4);
     }
     .sentence-low {
-        background: rgba(79,209,165,0.08);
-        border-left: 3px solid #4fd1a5;
-        padding: 0.6rem 1rem;
-        margin: 0.4rem 0;
-        border-radius: 0 8px 8px 0;
-        color: #d0dce6;
+        background: rgba(95, 138, 107, 0.05);
+        border-left: 4px solid var(--success);
+        padding: 0.8rem 1.2rem;
+        margin: 0.6rem 0;
+        border-radius: 4px 12px 12px 4px;
+        color: var(--text-primary);
         font-size: 0.92rem;
+        border-top: 1px solid rgba(255,255,255,0.02);
+        box-shadow: var(--shadow-recessed);
+        text-shadow: 0 1px 2px rgba(0,0,0,0.4);
     }
 
+    /* ══════════════════════════════════════════════════════════
+       METRIC DISPLAY GAUGES — Embedded Earth-charcoal LCDs
+       ══════════════════════════════════════════════════════════ */
     .metric-card {
-        background: linear-gradient(145deg, #1b2d45, #243e58);
+        background: rgba(6, 5, 4, 0.7) !important;
         border-radius: 14px;
-        padding: 1.2rem;
+        padding: 1.4rem 1rem;
         text-align: center;
-        border: 1px solid rgba(78, 205, 196, 0.06);
+        /* Recessed display bezel */
+        border: 1px solid rgba(255,255,255,0.03) !important;
+        border-bottom: 1px solid rgba(255,255,255,0.1) !important;
+        border-right: 1px solid rgba(255,255,255,0.06) !important;
+        box-shadow:
+            inset 0 4px 12px rgba(0,0,0,0.85),
+            0 1px 0 rgba(255,255,255,0.04),
+            0 0 12px rgba(212, 155, 76, 0.02) !important;
+        transition: box-shadow 0.25s ease;
+    }
+    .metric-card:hover {
+        box-shadow:
+            inset 0 4px 12px rgba(0,0,0,0.9),
+            0 1px 0 rgba(255,255,255,0.06),
+            0 0 18px rgba(212, 155, 76, 0.06) !important;
     }
     .metric-value {
-        font-size: 2rem;
-        font-weight: 700;
-        background: linear-gradient(135deg, #4ecdc4, #7c8cf0);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        font-size: 2.1rem;
+        font-weight: 800;
+        font-family: var(--font-heading);
+        background: linear-gradient(135deg, #e15b3e, #d49b4c) !important;
+        -webkit-background-clip: text !important;
+        -webkit-text-fill-color: transparent !important;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
     }
     .metric-label {
-        color: #8ba3b8;
-        font-size: 0.85rem;
-        margin-top: 0.3rem;
-        font-weight: 400;
+        color: var(--text-secondary);
+        font-size: 0.8rem;
+        margin-top: 0.4rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1.2px;
     }
 
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0d1b2a 0%, #1b2d45 100%);
-    }
-
+    /* ══════════════════════════════════════════════════════════
+       INTERFACE BUTTONS — 3D Bulging Terracotta & Brass Bulges
+       ══════════════════════════════════════════════════════════ */
     .stButton > button {
-        background: linear-gradient(135deg, #3dbaa2, #5b8def) !important;
-        color: white !important;
-        border: none !important;
+        /* Premium bulging gloss surface */
+        background: 
+            linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.03) 50%, rgba(0,0,0,0.15) 50%, rgba(0,0,0,0.35) 100%),
+            linear-gradient(135deg, #e15b3e 0%, #d49b4c 100%) !important;
+        color: #f5f2eb !important;
+        border: 1px solid rgba(255,255,255,0.18) !important;
+        border-top: 1px solid rgba(255,255,255,0.3) !important;
         border-radius: 12px !important;
-        padding: 0.7rem 2.5rem !important;
-        font-weight: 600 !important;
-        font-size: 1.05rem !important;
-        transition: all 0.3s ease !important;
-        box-shadow: 0 4px 15px rgba(61,186,162,0.25) !important;
+        padding: 0.8rem 2.2rem !important;
+        font-family: var(--font-heading) !important;
+        font-weight: 700 !important;
+        font-size: 1rem !important;
+        letter-spacing: 0.8px !important;
+        transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+        box-shadow:
+            0 8px 20px rgba(225, 91, 62, 0.2),
+            0 4px 10px rgba(0,0,0,0.4),
+            inset 0 1px 0 rgba(255,255,255,0.2) !important;
+        text-shadow: 0 -1px 1px rgba(0,0,0,0.3) !important;
+        backdrop-filter: blur(5px) !important;
     }
     .stButton > button:hover {
         transform: translateY(-2px) !important;
-        box-shadow: 0 8px 25px rgba(61,186,162,0.4) !important;
+        box-shadow:
+            0 12px 28px rgba(225, 91, 62, 0.35),
+            0 6px 15px rgba(0,0,0,0.4),
+            inset 0 1px 0 rgba(255,255,255,0.3) !important;
+    }
+    .stButton > button:active {
+        transform: translateY(1.5px) !important;
+        box-shadow:
+            inset 0 3px 7px rgba(0,0,0,0.6),
+            0 1px 2px rgba(255,255,255,0.1) !important;
     }
 
+    /* ══════════════════════════════════════════════════════════
+       INPUT CONTROLS — Engraved Earthwells
+       ══════════════════════════════════════════════════════════ */
+    .stTextInput input, .stTextArea textarea {
+        background: rgba(8, 6, 5, 0.65) !important;
+        backdrop-filter: blur(8px) !important;
+        border: 1px solid rgba(255,255,255,0.05) !important;
+        border-top: 1px solid rgba(0,0,0,0.45) !important;
+        border-left: 1px solid rgba(0,0,0,0.4) !important;
+        border-radius: 12px !important;
+        color: #f5f2eb !important;
+        font-family: var(--font-body) !important;
+        box-shadow: var(--shadow-recessed) !important;
+        padding: 0.75rem 1rem !important;
+        transition: border-color 0.25s ease, box-shadow 0.25s ease !important;
+    }
+    .stTextInput input:focus, .stTextArea textarea:focus {
+        border-color: rgba(212, 155, 76, 0.4) !important;
+        box-shadow: 
+            var(--shadow-recessed), 
+            0 0 8px rgba(212, 155, 76, 0.15) !important;
+    }
+    .stTextInput input::placeholder, .stTextArea textarea::placeholder {
+        color: #574e44 !important;
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       SIDEBAR INFO MODULE — Glass-inset Slot
+       ══════════════════════════════════════════════════════════ */
     .info-box {
-        background: rgba(78,205,196,0.08);
-        border: 1px solid rgba(78,205,196,0.2);
+        background: rgba(255,255,255,0.01) !important;
+        border: 1px solid rgba(255,255,255,0.03) !important;
+        border-top: 1px solid rgba(0,0,0,0.4) !important;
+        border-left: 1px solid rgba(0,0,0,0.3) !important;
         border-radius: 12px;
-        padding: 1rem 1.2rem;
-        color: #8ec8c0;
-        font-size: 0.9rem;
+        padding: 1.1rem 1.2rem;
+        color: #beb3a6;
+        font-size: 0.85rem;
+        line-height: 1.6;
+        box-shadow: var(--shadow-recessed);
+    }
+    .info-box b {
+        color: var(--text-primary) !important;
     }
 
+    /* ══════════════════════════════════════════════════════════
+       INDICATOR PILLS — Beveled Clay Badges
+       ══════════════════════════════════════════════════════════ */
     .badge-suspicious {
-        background-color: rgba(224, 96, 96, 0.12) !important;
-        color: #f07070 !important;
-        border: 1px solid rgba(224, 96, 96, 0.25) !important;
-        padding: 0.25rem 0.6rem !important;
-        border-radius: 6px !important;
-        font-size: 0.85rem !important;
-        font-weight: 500 !important;
+        background: var(--danger-bg) !important;
+        backdrop-filter: blur(6px) !important;
+        color: var(--danger) !important;
+        border: 1px solid var(--danger-border) !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
+        padding: 0.35rem 0.8rem !important;
+        border-radius: 8px !important;
+        font-size: 0.82rem !important;
+        font-weight: 600 !important;
         display: inline-block !important;
-        margin: 0.2rem !important;
-        font-family: 'Inter', sans-serif !important;
+        margin: 0.25rem !important;
+        box-shadow: 
+            0 2px 6px rgba(0,0,0,0.3),
+            inset 0 1px 0 rgba(255,255,255,0.05) !important;
     }
     .badge-credible {
-        background-color: rgba(79, 209, 165, 0.12) !important;
-        color: #4fd1a5 !important;
-        border: 1px solid rgba(79, 209, 165, 0.25) !important;
-        padding: 0.25rem 0.6rem !important;
-        border-radius: 6px !important;
-        font-size: 0.85rem !important;
-        font-weight: 500 !important;
+        background: var(--success-bg) !important;
+        backdrop-filter: blur(6px) !important;
+        color: var(--success) !important;
+        border: 1px solid var(--success-border) !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
+        padding: 0.35rem 0.8rem !important;
+        border-radius: 8px !important;
+        font-size: 0.82rem !important;
+        font-weight: 600 !important;
         display: inline-block !important;
-        margin: 0.2rem !important;
-        font-family: 'Inter', sans-serif !important;
+        margin: 0.25rem !important;
+        box-shadow: 
+            0 2px 6px rgba(0,0,0,0.3),
+            inset 0 1px 0 rgba(255,255,255,0.05) !important;
     }
 
+    /* ══════════════════════════════════════════════════════════
+       ALERT NOTIFICATIONS — Liquid glass bars
+       ══════════════════════════════════════════════════════════ */
+    .stAlert {
+        background: var(--glass-bg) !important;
+        backdrop-filter: var(--glass-blur) !important;
+        border: 1px solid var(--glass-border) !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 12px !important;
+        box-shadow: var(--shadow-beveled) !important;
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       FOOTER STRIP
+       ══════════════════════════════════════════════════════════ */
     .footer {
         text-align: center;
-        color: #5e7a8f;
+        color: var(--text-muted);
         font-size: 0.8rem;
-        padding: 2rem 0 1rem 0;
-        border-top: 1px solid rgba(78, 205, 196, 0.08);
-        margin-top: 3rem;
+        padding: 1.8rem 0 1.2rem 0;
+        border-top: 1px solid rgba(255,255,255,0.03);
+        margin-top: 3.5rem;
+        letter-spacing: 0.3px;
+    }
+    .footer p {
+        color: var(--text-muted) !important;
     }
 
-    /* Mobile Responsive Styles */
+    /* ══════════════════════════════════════════════════════════
+       MOBILE SCALING & LAYOUT
+       ══════════════════════════════════════════════════════════ */
     @media (max-width: 768px) {
+        [data-testid="block-container"] {
+            padding-left: 3% !important;
+            padding-right: 3% !important;
+            max-width: 96% !important;
+        }
         .hero-header {
-            padding: 1.5rem 1rem !important;
-            margin-bottom: 1.2rem !important;
+            padding: 2.2rem 1.2rem 1.8rem !important;
+            margin-bottom: 1.5rem !important;
         }
         .hero-header h1 {
             font-size: 1.8rem !important;
-            letter-spacing: -0.2px !important;
         }
         .hero-header p {
             font-size: 0.9rem !important;
         }
-        
-        /* Scale down verdict badge on mobile */
         .verdict-real, .verdict-fake, .verdict-uncertain {
-            font-size: 1.1rem !important;
-            padding: 0.6rem 1.5rem !important;
+            font-size: 1.05rem !important;
+            padding: 0.65rem 1.5rem !important;
         }
-        
-        /* Adjust metric cards padding and sizes */
         .metric-card {
-            padding: 0.9rem 0.5rem !important;
-            margin-bottom: 0.5rem !important;
+            padding: 1rem 0.6rem !important;
+            margin-bottom: 0.6rem !important;
         }
         .metric-value {
-            font-size: 1.6rem !important;
+            font-size: 1.7rem !important;
         }
-        .metric-label {
-            font-size: 0.8rem !important;
-        }
-        
-        /* Scale down badges text slightly on mobile */
         .badge-suspicious, .badge-credible {
             font-size: 0.78rem !important;
-            padding: 0.2rem 0.5rem !important;
         }
-
-        /* Adjust standard result cards padding */
         div[data-testid="stVerticalBlockBorderWrapper"] {
             padding: 1.2rem !important;
         }
@@ -288,40 +672,40 @@ def get_preprocessor():
     return TextPreprocessor()
 
 
-@st.cache_resource
 def get_scraper():
-    """Initialize article scraper."""
+    """Initialize article scraper (not cached so code updates take effect)."""
     return ArticleScraper()
 
 
 def create_gauge_chart(score, title="Credibility Score"):
-    """Create a beautiful gauge chart for the credibility score."""
+    """Create a gauge chart with vibrant liquid glass skeuomorphic tones in organic clay & brass."""
     if score >= 0.7:
-        bar_color = "#4fd1a5"
+        bar_color = "#4c705b"  # Soft Forest Sage green
     elif score >= 0.4:
-        bar_color = "#f0b060"
+        bar_color = "#c68b3f"  # Raw brass/Honey ochre
     else:
-        bar_color = "#f07070"
+        bar_color = "#b24339"  # Deep rust/cinnabar crimson
 
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
         value=score * 100,
         domain={'x': [0, 1], 'y': [0, 1]},
-        title={'text': title, 'font': {'size': 18, 'color': '#d0dce6', 'family': 'Inter'}},
-        number={'suffix': '%', 'font': {'size': 42, 'color': '#d0dce6', 'family': 'Inter'}},
+        title={'text': title, 'font': {'size': 16, 'color': '#fdfbf7', 'family': 'Space Grotesk'}},
+        number={'suffix': '%', 'font': {'size': 42, 'color': bar_color, 'family': 'Space Grotesk', 'weight': 'bold'}},
         gauge={
-            'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': '#5e7a8f',
-                     'tickfont': {'color': '#8ba3b8'}},
+            'axis': {'range': [0, 100], 'tickwidth': 1.5, 'tickcolor': '#8c7b6c',
+                     'tickfont': {'color': '#d5c9ba', 'family': 'Inter'}},
             'bar': {'color': bar_color, 'thickness': 0.3},
-            'bgcolor': '#1b2d45',
-            'borderwidth': 0,
+            'bgcolor': 'rgba(18, 15, 14, 0.45)',
+            'borderwidth': 1.5,
+            'bordercolor': 'rgba(255, 255, 255, 0.05)',
             'steps': [
-                {'range': [0, 35], 'color': 'rgba(224,96,96,0.12)'},
-                {'range': [35, 65], 'color': 'rgba(240,176,96,0.10)'},
-                {'range': [65, 100], 'color': 'rgba(79,209,165,0.08)'},
+                {'range': [0, 35], 'color': 'rgba(178,67,57,0.04)'},
+                {'range': [35, 65], 'color': 'rgba(198,139,63,0.04)'},
+                {'range': [65, 100], 'color': 'rgba(76,112,91,0.04)'},
             ],
             'threshold': {
-                'line': {'color': '#fff', 'width': 3},
+                'line': {'color': bar_color, 'width': 3},
                 'thickness': 0.8,
                 'value': score * 100
             }
@@ -437,21 +821,97 @@ def predict_article(text, model, preprocessor):
     }
 
 
-def main():
-    # Start the background update daemon automatically if it isn't already running
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+def load_smtp_config():
+    """Load SMTP configurations from local storage."""
+    config_path = os.path.join(SCRIPT_DIR, "assets", "smtp_config.json")
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def save_smtp_config(smtp_user, smtp_password, smtp_server="smtp.gmail.com", smtp_port=587):
+    """Save SMTP configurations to local storage."""
+    config_path = os.path.join(SCRIPT_DIR, "assets", "smtp_config.json")
+    try:
+        os.makedirs(os.path.dirname(config_path), exist_ok=True)
+        config = {
+            "smtp_user": smtp_user,
+            "smtp_password": smtp_password,
+            "smtp_server": smtp_server,
+            "smtp_port": smtp_port
+        }
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=4)
+        return True
+    except Exception:
+        return False
+
+def send_otp_email(to_email, otp):
+    """Send OTP email using configurations from local config, session state, or environment variables."""
+    config = load_smtp_config()
+    smtp_server = config.get("smtp_server") or st.session_state.get("smtp_server") or os.environ.get("SMTP_SERVER", "smtp.gmail.com")
+    smtp_port = int(config.get("smtp_port") or st.session_state.get("smtp_port") or os.environ.get("SMTP_PORT", 587))
+    smtp_user = config.get("smtp_user") or st.session_state.get("smtp_user") or os.environ.get("SMTP_USER", "")
+    smtp_password = config.get("smtp_password") or st.session_state.get("smtp_password") or os.environ.get("SMTP_PASSWORD", "")
+    
+    if not smtp_user or not smtp_password:
+        return False, "SMTP user or password not configured."
+        
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = smtp_user
+        msg['To'] = to_email
+        msg['Subject'] = f"🛡️ OTP Code for Fake News Detector: {otp}"
+        
+        body = f"""
+        <html>
+        <body style="font-family: sans-serif; background-color: #0c0a09; color: #fdfbf7; padding: 20px;">
+            <div style="max-width: 500px; margin: 0 auto; background-color: #13100e; border: 1px solid #c68b3f; border-radius: 12px; padding: 30px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+                <h2 style="color: #d35230; margin-top: 0;">Fake News Detector Authentication</h2>
+                <p style="color: #d5c9ba; font-size: 16px;">Please use the following One-Time Password (OTP) to sign in to your credibility dashboard:</p>
+                <div style="font-size: 32px; font-weight: bold; color: #c68b3f; background-color: #1a1614; padding: 15px; border-radius: 8px; margin: 25px 0; letter-spacing: 5px;">
+                    {otp}
+                </div>
+                <p style="color: #8c7b6c; font-size: 13px;">This OTP is valid for 10 minutes. If you did not request this, please ignore this email.</p>
+                <hr style="border-color: rgba(255,255,255,0.05); margin: 20px 0;">
+                <p style="color: #8c7b6c; font-size: 11px;">🛡️ AI Credibility Analyzer Portal</p>
+            </div>
+        </body>
+        </html>
+        """
+        msg.attach(MIMEText(body, 'html'))
+        
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        server.login(smtp_user, smtp_password)
+        server.sendmail(smtp_user, to_email, msg.as_string())
+        server.quit()
+        return True, "Email sent successfully"
+    except Exception as e:
+        return False, str(e)
+
+
+@st.cache_resource
+def start_updater_daemon():
+    """Start the background update daemon exactly once, completely hiding the console window on Windows."""
     try:
         import subprocess
         updater_path = os.path.join(SCRIPT_DIR, "realtime_update.py")
         if os.path.exists(updater_path):
             if os.name == 'nt':
-                # On Windows, launch as a detached process (no console window pop-up)
-                DETACHED_PROCESS = 0x00000008
+                CREATE_NO_WINDOW = 0x08000000
                 subprocess.Popen([sys.executable, updater_path], 
-                                 creationflags=DETACHED_PROCESS,
+                                 creationflags=CREATE_NO_WINDOW,
                                  stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL)
             else:
-                # On Unix/macOS, launch in a new session
                 subprocess.Popen([sys.executable, updater_path], 
                                  start_new_session=True,
                                  stdout=subprocess.DEVNULL,
@@ -459,52 +919,214 @@ def main():
     except Exception:
         pass
 
+def render_landing():
+    """Render the marketing landing/homescreen page."""
     st.markdown("""
-    <div class="hero-header">
-        <h1>🛡️ Fake News & Misinformation Detector</h1>
-        <p>AI-powered credibility analysis using NLP & Machine Learning</p>
+    <div class="landing-hero">
+        <h1>🛡️ TruthShield Portal</h1>
+        <p>Advanced Credibility Analyzer & Media Literacy Engine</p>
+        <div class="hero-divider"></div>
+        <p style="font-size: 1.1rem; color: #beb3a6; margin-top: 1rem; max-width: 700px; margin-left: auto; margin-right: auto;">
+            Empowering citizens to verify facts, decode propaganda patterns, and challenge disinformation networks using high-performance NLP machine learning pipelines.
+        </p>
     </div>
     """, unsafe_allow_html=True)
 
-    with st.sidebar:
-        st.markdown("### ⚙️ Settings")
-        st.markdown("---")
-        input_mode = st.radio(
-            "Input Method",
-            ["📝 Paste Article Text", "🔗 Enter URL"],
-            index=0,
-        )
-        st.markdown("---")
-        st.markdown("### 📚 Model & Dataset Info")
-        st.markdown("""
-        <div class="info-box">
-            This AI model analyzes news credibility using a <b>Passive-Aggressive Classifier</b> trained on a combined dataset of <b>69,957 news articles</b> with an accuracy of <b>90.14%</b>.<br><br>
-            <b>Data Sources:</b>
-            <ul style="margin-left: -15px; margin-bottom: 0px;">
-                <li><b>ISOT (Kaggle):</b> ~45,000 articles (Reuters news & flagged sources).</li>
-                <li><b>LIAR (UCSB):</b> ~10,000 PolitiFact statements.</li>
-                <li><b>COVID-19 Dataset:</b> ~8,500 claims & conspiracy tweets.</li>
-                <li><b>McIntire Dataset:</b> ~6,300 benchmark articles.</li>
-                <li><b>Google Fact Check Tools:</b> Real-time daily streams (Snopes, FactCheck.org, etc.).</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
+    # CTA Button
+    col_btn1, col_btn2, col_btn3 = st.columns([1, 1.2, 1])
+    with col_btn2:
+        if st.button("🚀 Enter Credibility Console", use_container_width=True, key="cta_enter_portal"):
+            st.session_state.page = "login"
+            st.rerun()
 
-        st.markdown("---")
-        st.markdown("### 🔬 How It Works")
-        st.markdown("""
-        1. **Text Processing** — Clean & tokenize  
-        2. **TF-IDF Vectorization** — Extract features  
-        3. **ML Classification** — Predict credibility  
-        4. **Explainability** — Highlight suspicious claims  
-        """)
-        st.markdown("---")
-        st.markdown("""
-        <div style="color:#5e7a8f;font-size:0.8rem;text-align:center;">
-            Built with Streamlit, scikit-learn & Newspaper3k
-        </div>
-        """, unsafe_allow_html=True)
+    st.markdown("<br><br>", unsafe_allow_html=True)
 
+    # Features grid in Streamlit columns
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        with st.container(border=True):
+            st.markdown("""
+            <div style="text-align: center; padding: 1rem 0;">
+                <span style="font-size: 3rem;">🧠</span>
+                <h4 style="margin-top: 1rem;">Natural Language Processing</h4>
+                <p style="font-size: 0.9rem; color: var(--text-secondary);">
+                    Classifies text syntax patterns, vocabulary density, and clickbait phrases using a custom TF-IDF Passive-Aggressive classifier.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+    with col2:
+        with st.container(border=True):
+            st.markdown("""
+            <div style="text-align: center; padding: 1rem 0;">
+                <span style="font-size: 3rem;">🌐</span>
+                <h4 style="margin-top: 1rem;">Real-Time Article Scraper</h4>
+                <p style="font-size: 0.9rem; color: var(--text-secondary);">
+                    Extracts metadata and body copy from online news articles dynamically using an automated newspaper parsing wrapper.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+    with col3:
+        with st.container(border=True):
+            st.markdown("""
+            <div style="text-align: center; padding: 1rem 0;">
+                <span style="font-size: 3rem;">📖</span>
+                <h4 style="margin-top: 1rem;">Media Literacy Gaming</h4>
+                <p style="font-size: 0.9rem; color: var(--text-secondary);">
+                    Equips readers with the SIFT fact-checking method, interactive bias checklists, and intuition tests for false headlines.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Statistics Board
+    st.markdown("### 📊 Project Insights & Metrics")
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        st.markdown("""<div class="metric-card">
+            <div class="metric-value">69,957</div>
+            <div class="metric-label">Articles in Model Corpus</div>
+        </div>""", unsafe_allow_html=True)
+    with m2:
+        st.markdown("""<div class="metric-card">
+            <div class="metric-value">90.14%</div>
+            <div class="metric-label">Prediction Accuracy</div>
+        </div>""", unsafe_allow_html=True)
+    with m3:
+        st.markdown("""<div class="metric-card">
+            <div class="metric-value">Real-Time</div>
+            <div class="metric-label">Data Streams</div>
+        </div>""", unsafe_allow_html=True)
+
+    # Footer
+    st.markdown("""
+    <div class="footer">
+        <p>Fake News Detector v1.0 — Built with Streamlit, scikit-learn & NLP</p>
+        <p>This tool is for educational purposes. Always verify information with trusted sources.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def render_login():
+    """Render the Gmail OTP login page."""
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    
+    col_l1, col_l2, col_l3 = st.columns([1, 1.5, 1])
+    
+    with col_l2:
+        with st.container(border=True):
+            st.markdown(f"""
+            <div style="text-align: center; margin-bottom: 1.5rem;">
+                <img src="{logo_base64}" style="width: 75px; height: 75px; border-radius: 50%; border: 2px solid var(--brass); margin-bottom: 0.8rem; background: rgba(18, 15, 14, 0.8);">
+                <h3 style="margin: 0; color: var(--accent);">Sign In to Console</h3>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.2rem;">Verify your Gmail using One-Time Password</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            email_input = st.text_input("Enter your Gmail Address:", placeholder="name@gmail.com", key="login_email")
+            
+            # Load stored config
+            stored_config = load_smtp_config()
+            is_configured = bool(stored_config.get("smtp_user") and stored_config.get("smtp_password"))
+            
+            # Show configuration status or expander
+            if is_configured:
+                st.markdown("<div style='background:rgba(76,112,91,0.04); border:1px solid var(--success-border); padding:0.8rem; border-radius:8px; margin-bottom:1rem; font-size:0.85rem;'><span style='color:var(--success); font-weight:bold;'>✔ SMTP Server Configured</span><br><span style='font-size:0.75rem; color:var(--text-secondary);'>Credentials are stored securely on disk. Next logins won't expose them.</span></div>", unsafe_allow_html=True)
+                change_smtp = st.checkbox("🔄 Override/Change SMTP Settings", key="change_smtp_settings")
+            else:
+                change_smtp = True
+                
+            if change_smtp:
+                with st.expander("⚙️ SMTP Email Server Settings", expanded=not is_configured):
+                    st.caption("To send actual emails, enter your SMTP sender account credentials below:")
+                    smtp_user_input = st.text_input("SMTP User (Gmail Address):", value=st.session_state.get("smtp_user", ""), placeholder="your.sender@gmail.com", key="setup_smtp_user")
+                    smtp_pass_input = st.text_input("SMTP App Password:", value="", type="password", placeholder="xxxx xxxx xxxx xxxx", key="setup_smtp_pass")
+                    
+                    col_smtp1, col_smtp2 = st.columns(2)
+                    with col_smtp1:
+                        smtp_server_input = st.text_input("SMTP Server:", value=st.session_state.get("smtp_server", "smtp.gmail.com"), key="setup_smtp_server")
+                    with col_smtp2:
+                        smtp_port_input = st.number_input("SMTP Port:", value=int(st.session_state.get("smtp_port", 587)), step=1, key="setup_smtp_port")
+                        
+                    if smtp_user_input:
+                        st.session_state.smtp_user = smtp_user_input.strip()
+                    if smtp_pass_input:
+                        st.session_state.smtp_password = smtp_pass_input.strip()
+                    st.session_state.smtp_server = smtp_server_input.strip()
+                    st.session_state.smtp_port = int(smtp_port_input)
+                    
+                    st.markdown("""
+                    <div style="font-size:0.78rem; color:var(--text-muted); margin-top: 0.5rem;">
+                        💡 <b>Gmail Setup Note:</b> Google requires you to use an <b>App Password</b>, not your normal password.
+                        <ol style="margin-left:-15px; margin-top:0.2rem; margin-bottom:0px; color:var(--text-muted);">
+                            <li>Go to your <a href="https://myaccount.google.com/" target="_blank" style="color:var(--accent);">Google Account Settings</a>.</li>
+                            <li>Enable <b>2-Step Verification</b> under the <i>Security</i> tab.</li>
+                            <li>Search for <b>App Passwords</b> in the search bar.</li>
+                            <li>Generate a new App Password (e.g., name it "News Detector") and paste the 16-character code above.</li>
+                        </ol>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            if not st.session_state.otp_sent:
+                if st.button("Send Verification Code", use_container_width=True, type="primary", key="send_otp_btn"):
+                    if email_input and re.match(r"[^@]+@[^@]+\.[^@]+", email_input.strip()):
+                        otp = str(random.randint(100000, 999999))
+                        st.session_state.otp_code = otp
+                        st.session_state.email = email_input.strip()
+                        
+                        # Save credentials if changed
+                        user_val = st.session_state.get("smtp_user")
+                        pass_val = st.session_state.get("smtp_password")
+                        server_val = st.session_state.get("smtp_server", "smtp.gmail.com")
+                        port_val = st.session_state.get("smtp_port", 587)
+                        
+                        if user_val and pass_val:
+                            save_smtp_config(user_val, pass_val, server_val, port_val)
+                        
+                        with st.spinner("✉️ Sending verification code..."):
+                            success, msg = send_otp_email(email_input.strip(), otp)
+                            
+                        st.session_state.otp_sent = True
+                        if success:
+                            st.success(f"📨 Verification code sent to **{email_input}**!")
+                        else:
+                            st.info(f"💡 **Developer Mock Mode Active**<br>We generated OTP: <span style='font-size:1.4rem; color:var(--accent); font-weight:bold;'>{otp}</span><br><span style='font-size:0.8rem; color:var(--text-muted);'>Reason: SMTP credentials not set in env variables. Copy the OTP code above to sign in.</span>")
+                        st.rerun()
+                    else:
+                        st.error("⚠️ Please enter a valid email address.")
+            else:
+                st.info(f"📨 Verification code sent to **{st.session_state.email}**")
+                otp_input = st.text_input("Enter 6-Digit Code:", placeholder="123456", key="otp_input")
+                
+                col_btn_verify, col_btn_resend = st.columns(2)
+                with col_btn_verify:
+                    if st.button("Verify & Sign In", use_container_width=True, type="primary", key="verify_otp_btn"):
+                        if otp_input.strip() == st.session_state.otp_code:
+                            st.session_state.logged_in = True
+                            st.session_state.page = "dashboard"
+                            st.success("✅ Signed in successfully!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Incorrect verification code. Please try again.")
+                with col_btn_resend:
+                    if st.button("Change Email", use_container_width=True, key="resend_otp_btn"):
+                        st.session_state.otp_sent = False
+                        st.session_state.otp_code = None
+                        st.rerun()
+            
+            st.markdown("<hr style='border-color: rgba(255,255,255,0.05);'>", unsafe_allow_html=True)
+            
+            if st.button("⬅ Back to Homepage", use_container_width=True, key="back_to_home_btn"):
+                st.session_state.page = "landing"
+                st.session_state.otp_sent = False
+                st.session_state.otp_code = None
+                st.rerun()
+
+
+def render_dashboard():
+    """Render the credibility analyzer dashboard page."""
     model = load_model()
     preprocessor = get_preprocessor()
     scraper = get_scraper()
@@ -525,205 +1147,536 @@ def main():
                 "(https://www.kaggle.com/datasets/clmentbisaillon/fake-and-real-news-dataset)")
         return
 
-    article_text = None
-
-    if "📝" in input_mode:
-        st.markdown("### 📝 Paste Your Article")
-        article_text = st.text_area(
-            "Enter the article text to analyze:",
-            height=220,
-            placeholder="Paste a news article here to check its credibility...",
-            key="article_input"
+    with st.sidebar:
+        st.markdown(f"### 👤 User Account")
+        st.markdown(f"""
+        <div class="info-box" style="margin-bottom: 0.8rem;">
+            Logged in as:<br>
+            <b style="color: var(--accent);">{st.session_state.email}</b>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("🚪 Log Out", use_container_width=True, key="sidebar_logout_btn"):
+            st.session_state.logged_in = False
+            st.session_state.email = ""
+            st.session_state.page = "landing"
+            st.rerun()
+        st.markdown("---")
+        st.markdown("### Settings")
+        input_mode = st.radio(
+            "Input Method",
+            ["📝 Paste Article Text", "🔗 Enter URL"],
+            index=0,
         )
-    else:
-        st.markdown("### 🔗 Enter Article URL")
-        url_input = st.text_input(
-            "Article URL:",
-            placeholder="https://www.example.com/news/article",
-            key="url_input"
-        )
-        if url_input:
-            with st.spinner("🔍 Extracting article from URL..."):
-                result = scraper.extract_from_url(url_input)
-                if result['success']:
-                    article_text = result['text']
-                    st.success(f"✅ Extracted: **{result['title']}**")
-                    if result['authors']:
-                        st.caption(f"Authors: {', '.join(result['authors'])}")
-                    if result['publish_date']:
-                        st.caption(f"Published: {result['publish_date']}")
-                    with st.expander("📄 View Extracted Text", expanded=False):
-                        st.text(article_text[:2000] + ("..." if len(article_text) > 2000 else ""))
-                else:
-                    st.error(f"❌ {result['error']}")
-
-    col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
-    with col_btn2:
-        predict_clicked = st.button("🔍  Analyze Credibility", use_container_width=True, type="primary")
-
-    if predict_clicked and article_text and len(article_text.strip()) > 50:
-        with st.spinner("🧠 Analyzing article with AI..."):
-            results = predict_article(article_text, model, preprocessor)
+        st.markdown("---")
+        st.markdown("### Model & Dataset")
+        st.markdown("""
+        <div class="info-box">
+            Credibility analysis using a <b>Passive-Aggressive Classifier</b> trained on <b>69,957 news articles</b> — accuracy <b>90.14%</b>.<br><br>
+            <b>Sources:</b>
+            <ul style="margin-left: -15px; margin-bottom: 0px;">
+                <li><b>ISOT:</b> ~45K Reuters articles</li>
+                <li><b>LIAR:</b> ~10K PolitiFact statements</li>
+                <li><b>COVID-19:</b> ~8.5K claims & tweets</li>
+                <li><b>McIntire:</b> ~6.3K benchmark articles</li>
+                <li><b>Fact Check API:</b> Daily streams</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
 
         st.markdown("---")
+        st.markdown("### How It Works")
+        st.markdown("""
+        1. **Text Processing** — Clean & tokenize  
+        2. **TF-IDF** — Extract features  
+        3. **Classification** — Predict credibility  
+        4. **Explainability** — Highlight suspicious claims  
+        """)
+        st.markdown("---")
+        st.markdown("""
+        <div style="color:#9a8d82;font-size:0.78rem;text-align:center;">
+            Built with Streamlit, scikit-learn & Newspaper3k
+        </div>
+        """, unsafe_allow_html=True)
 
-        st.markdown("## 📊 Analysis Results")
+    tab_analyze, tab_education = st.tabs(["🔍 Credibility Analyzer", "📖 Media Literacy Hub"])
 
-        col_verdict, col_gauge = st.columns([1, 1])
+    with tab_analyze:
+        article_text = None
 
-        with col_verdict:
-            with st.container(border=True):
-                st.markdown("#### 🏷️ Verdict")
-
-                pred = results['prediction']
-                conf = results['confidence']
-
-                if pred == 'REAL' and conf > 0.3:
-                    verdict_class = "verdict-real"
-                    verdict_text = "✅ LIKELY CREDIBLE"
-                    verdict_desc = "This article appears to be **credible** based on our analysis."
-                elif pred == 'FAKE' and conf > 0.3:
-                    verdict_class = "verdict-fake"
-                    verdict_text = "🚨 LIKELY FAKE"
-                    verdict_desc = "This article shows signs of **misinformation** or fabrication."
-                else:
-                    verdict_class = "verdict-uncertain"
-                    verdict_text = "⚠️ UNCERTAIN"
-                    verdict_desc = "The model is **uncertain** about this article. Verify with trusted sources."
-
-                # Determine correctness level label
-                cred_pct = results['credibility'] * 100
-                if cred_pct >= 80:
-                    level_label = "Very High Credibility"
-                    level_color = "#4fd1a5"
-                elif cred_pct >= 60:
-                    level_label = "High Credibility"
-                    level_color = "#7ccf8e"
-                elif cred_pct >= 40:
-                    level_label = "Moderate Credibility"
-                    level_color = "#f0b060"
-                elif cred_pct >= 20:
-                    level_label = "Low Credibility"
-                    level_color = "#e88050"
-                else:
-                    level_label = "Very Low Credibility"
-                    level_color = "#f07070"
-
-                st.markdown(f'<div style="text-align:center;margin:1.5rem 0;">'
-                            f'<span class="{verdict_class}">{verdict_text}</span></div>',
-                            unsafe_allow_html=True)
+        if "📝" in input_mode:
+            st.markdown("### Paste Your Article")
+            article_text = st.text_area(
+                "Enter the article text to analyze:",
+                height=220,
+                placeholder="Paste a news article here to check its credibility...",
+                key="article_input"
+            )
+            if article_text:
+                words = len(article_text.split())
+                chars = len(article_text)
                 st.markdown(f"""
-                <div style="text-align:center;margin:1rem 0;">
-                    <span style="font-size:2rem;font-weight:700;color:{level_color};">{cred_pct:.1f}%</span>
-                    <br>
-                    <span style="font-size:0.95rem;color:{level_color};font-weight:600;">{level_label}</span>
+                <div style="display: flex; gap: 15px; margin-top: -10px; margin-bottom: 15px;">
+                    <span style="font-size:0.8rem; color:var(--text-secondary);">📝 Words: <b>{words}</b></span>
+                    <span style="font-size:0.8rem; color:var(--text-secondary);">🔤 Characters: <b>{chars}</b></span>
                 </div>
                 """, unsafe_allow_html=True)
-                st.markdown(verdict_desc)
-                st.markdown(f"**Model Confidence:** {conf*100:.1f}%")
+        else:
+            st.markdown("### Enter Article URL")
+            url_input = st.text_input(
+                "Article URL:",
+                placeholder="https://www.example.com/news/article",
+                key="url_input"
+            )
+            if url_input:
+                with st.spinner("🔍 Extracting article from URL..."):
+                    result = scraper.extract_from_url(url_input)
+                    if result['success']:
+                        article_text = result['text']
+                        method = result.get('fetch_method', '')
+                        method_note = f" *(via {method})*" if method else ''
+                        st.success(f"✅ Extracted: **{result['title']}**{method_note}")
+                        if result['authors']:
+                            st.caption(f"Authors: {', '.join(result['authors'])}")
+                        if result['publish_date']:
+                            st.caption(f"Published: {result['publish_date']}")
+                        with st.expander("📄 View Extracted Text", expanded=False):
+                            st.text(article_text[:2000] + ("..." if len(article_text) > 2000 else ""))
+                    else:
+                        st.error(f"❌ {result['error']}")
 
-        with col_gauge:
-            with st.container(border=True):
-                fig = create_gauge_chart(results['credibility'])
-                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+        col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
+        with col_btn2:
+            predict_clicked = st.button("Analyze Credibility", use_container_width=True, type="primary")
 
-        indicators = results['indicators']
-        m1, m2, m3, m4 = st.columns(4)
+        if predict_clicked and article_text and len(article_text.strip()) > 50:
+            with st.spinner("🧠 Analyzing article with AI..."):
+                results = predict_article(article_text, model, preprocessor)
 
-        with m1:
-            st.markdown(f"""<div class="metric-card">
-                <div class="metric-value">{indicators['sensationalism_score']*100:.0f}%</div>
-                <div class="metric-label">Sensationalism</div>
-            </div>""", unsafe_allow_html=True)
-        with m2:
-            st.markdown(f"""<div class="metric-card">
-                <div class="metric-value">{indicators['credibility_score']*100:.0f}%</div>
-                <div class="metric-label">Credibility Signals</div>
-            </div>""", unsafe_allow_html=True)
-        with m3:
-            st.markdown(f"""<div class="metric-card">
-                <div class="metric-value">{indicators['caps_ratio']*100:.0f}%</div>
-                <div class="metric-label">Caps Ratio</div>
-            </div>""", unsafe_allow_html=True)
-        with m4:
-            word_count = len(article_text.split())
-            st.markdown(f"""<div class="metric-card">
-                <div class="metric-value">{word_count:,}</div>
-                <div class="metric-label">Word Count</div>
-            </div>""", unsafe_allow_html=True)
+            st.markdown("---")
+            st.markdown("## Analysis Results")
 
-        st.markdown("<br>", unsafe_allow_html=True)
+            col_verdict, col_gauge = st.columns([1, 1])
 
-        with st.container(border=True):
-            st.markdown("#### 🔎 Sentence-Level Analysis")
-            st.caption("Sentences are ranked by suspicion level — higher scores indicate more suspicious content.")
-
-            for sent, score in results['sentence_analysis'][:10]:
-                if score > 0.5:
-                    css_class = "sentence-high"
-                    icon = "🔴"
-                elif score > 0.2:
-                    css_class = "sentence-medium"
-                    icon = "🟡"
-                else:
-                    css_class = "sentence-low"
-                    icon = "🟢"
-
-                display_sent = sent[:200] + "..." if len(sent) > 200 else sent
-                st.markdown(
-                    f'<div class="{css_class}">{icon} <b>[{score*100:.0f}%]</b> {display_sent}</div>',
-                    unsafe_allow_html=True
-                )
-
-        has_suspicious = bool(indicators['suspicious_patterns'])
-        has_credibility = bool(indicators['credibility_indicators'])
-
-        if has_suspicious and has_credibility:
-            col_sus, col_cred = st.columns(2)
-            with col_sus:
+            with col_verdict:
                 with st.container(border=True):
-                    st.markdown("#### ⚠️ Sensational / Suspicious Words")
+                    st.markdown("#### Verdict")
+
+                    pred = results['prediction']
+                    conf = results['confidence']
+
+                    if pred == 'REAL' and conf > 0.3:
+                        verdict_class = "verdict-real"
+                        verdict_text = "✅ LIKELY CREDIBLE"
+                        verdict_desc = "This article appears to be **credible** based on our analysis."
+                    elif pred == 'FAKE' and conf > 0.3:
+                        verdict_class = "verdict-fake"
+                        verdict_text = "🚨 LIKELY FAKE"
+                        verdict_desc = "This article shows signs of **misinformation** or fabrication."
+                    else:
+                        verdict_class = "verdict-uncertain"
+                        verdict_text = "⚠️ UNCERTAIN"
+                        verdict_desc = "The model is **uncertain** about this article. Verify with trusted sources."
+
+                    cred_pct = results['credibility'] * 100
+                    if cred_pct >= 80:
+                        level_label = "Very High Credibility"
+                        level_color = "#4c705b"
+                    elif cred_pct >= 60:
+                        level_label = "High Credibility"
+                        level_color = "#6f8f7b"
+                    elif cred_pct >= 40:
+                        level_label = "Moderate Credibility"
+                        level_color = "#c68b3f"
+                    elif cred_pct >= 20:
+                        level_label = "Low Credibility"
+                        level_color = "#d35230"
+                    else:
+                        level_label = "Very Low Credibility"
+                        level_color = "#b24339"
+
+                    st.markdown(f'<div style="text-align:center;margin:1.5rem 0;">'
+                                f'<span class="{verdict_class}">{verdict_text}</span></div>',
+                                unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <div style="text-align:center;margin:1rem 0;">
+                        <span style="font-size:2rem;font-weight:700;color:{level_color};">{cred_pct:.1f}%</span>
+                        <br>
+                        <span style="font-size:0.95rem;color:{level_color};font-weight:600;">{level_label}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.markdown(verdict_desc)
+                    st.markdown(f"**Model Confidence:** {conf*100:.1f}%")
+
+            with col_gauge:
+                with st.container(border=True):
+                    fig = create_gauge_chart(results['credibility'])
+                    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+            indicators = results['indicators']
+            m1, m2, m3, m4 = st.columns(4)
+
+            with m1:
+                st.markdown(f"""<div class="metric-card">
+                    <div class="metric-value">{indicators['sensationalism_score']*100:.0f}%</div>
+                    <div class="metric-label">Sensationalism</div>
+                </div>""", unsafe_allow_html=True)
+            with m2:
+                st.markdown(f"""<div class="metric-card">
+                    <div class="metric-value">{indicators['credibility_score']*100:.0f}%</div>
+                    <div class="metric-label">Credibility Signals</div>
+                </div>""", unsafe_allow_html=True)
+            with m3:
+                st.markdown(f"""<div class="metric-card">
+                    <div class="metric-value">{indicators['caps_ratio']*100:.0f}%</div>
+                    <div class="metric-label">Caps Ratio</div>
+                </div>""", unsafe_allow_html=True)
+            with m4:
+                word_count = len(article_text.split())
+                st.markdown(f"""<div class="metric-card">
+                    <div class="metric-value">{word_count:,}</div>
+                    <div class="metric-label">Word Count</div>
+                </div>""", unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            with st.container(border=True):
+                st.markdown("#### Sentence-Level Analysis")
+                st.caption("Sentences are ranked by suspicion level — higher scores indicate more suspicious content.")
+
+                for sent, score in results['sentence_analysis'][:10]:
+                    if score > 0.5:
+                        css_class = "sentence-high"
+                        icon = "🔴"
+                    elif score > 0.2:
+                        css_class = "sentence-medium"
+                        icon = "🟡"
+                    else:
+                        css_class = "sentence-low"
+                        icon = "🟢"
+
+                    display_sent = sent[:200] + "..." if len(sent) > 200 else sent
+                    st.markdown(
+                        f'<div class="{css_class}">{icon} <b>[{score*100:.0f}%]</b> {display_sent}</div>',
+                        unsafe_allow_html=True
+                    )
+
+            has_suspicious = bool(indicators['suspicious_patterns'])
+            has_credible = bool(indicators['credibility_indicators'])
+
+            if has_suspicious and has_credible:
+                col_sus, col_cred = st.columns(2)
+                with col_sus:
+                    with st.container(border=True):
+                        st.markdown("#### Sensational / Suspicious Words")
+                        st.caption("Language styles or sensational claims commonly correlated with clickbait or unverified stories.")
+                        badges_html = "".join([f'<span class="badge-suspicious">🚩 {explain_pattern(pat)}</span>' for pat in sorted(set(indicators['suspicious_patterns'][:15]))])
+                        st.markdown(f'<div style="margin-top: 0.5rem;">{badges_html}</div>', unsafe_allow_html=True)
+                with col_cred:
+                    with st.container(border=True):
+                        st.markdown("#### Journalistic / Credibility Signals")
+                        st.caption("Phrases and keywords indicating citations, official statements, and objective reporting.")
+                        badges_html = "".join([f'<span class="badge-credible">✅ {explain_pattern(pat)}</span>' for pat in sorted(set(indicators['credibility_indicators'][:15]))])
+                        st.markdown(f'<div style="margin-top: 0.5rem;">{badges_html}</div>', unsafe_allow_html=True)
+            elif has_suspicious:
+                with st.container(border=True):
+                    st.markdown("#### Sensational / Suspicious Words")
                     st.caption("Language styles or sensational claims commonly correlated with clickbait or unverified stories.")
                     badges_html = "".join([f'<span class="badge-suspicious">🚩 {explain_pattern(pat)}</span>' for pat in sorted(set(indicators['suspicious_patterns'][:15]))])
                     st.markdown(f'<div style="margin-top: 0.5rem;">{badges_html}</div>', unsafe_allow_html=True)
-            with col_cred:
+            elif has_credible:
                 with st.container(border=True):
-                    st.markdown("#### 📜 Journalistic / Credibility Signals")
+                    st.markdown("#### Journalistic / Credibility Signals")
                     st.caption("Phrases and keywords indicating citations, official statements, and objective reporting.")
                     badges_html = "".join([f'<span class="badge-credible">✅ {explain_pattern(pat)}</span>' for pat in sorted(set(indicators['credibility_indicators'][:15]))])
                     st.markdown(f'<div style="margin-top: 0.5rem;">{badges_html}</div>', unsafe_allow_html=True)
-        elif has_suspicious:
-            with st.container(border=True):
-                st.markdown("#### ⚠️ Sensational / Suspicious Words")
-                st.caption("Language styles or sensational claims commonly correlated with clickbait or unverified stories.")
-                badges_html = "".join([f'<span class="badge-suspicious">🚩 {explain_pattern(pat)}</span>' for pat in sorted(set(indicators['suspicious_patterns'][:15]))])
-                st.markdown(f'<div style="margin-top: 0.5rem;">{badges_html}</div>', unsafe_allow_html=True)
-        elif has_credibility:
-            with st.container(border=True):
-                st.markdown("#### 📜 Journalistic / Credibility Signals")
-                st.caption("Phrases and keywords indicating citations, official statements, and objective reporting.")
-                badges_html = "".join([f'<span class="badge-credible">✅ {explain_pattern(pat)}</span>' for pat in sorted(set(indicators['credibility_indicators'][:15]))])
-                st.markdown(f'<div style="margin-top: 0.5rem;">{badges_html}</div>', unsafe_allow_html=True)
 
-    elif predict_clicked:
-        if "📝" in input_mode:
-            # User pasted text but it was too short
-            st.warning("⚠️ Please enter at least 50 characters of article text to analyze.")
-        elif article_text is None:
-            # URL mode — extraction already showed an error via st.error()
-            st.info("💡 **Tip:** If the website blocks automated access, switch to "
-                    "**📝 Paste Article Text** mode in the sidebar and paste the article manually.")
-        else:
-            st.warning("⚠️ The extracted article text is too short to analyze reliably. "
-                       "Try pasting the full article text directly instead.")
+            # Add Feedback Loop & Action Center
+            st.markdown("---")
+            col_feed1, col_feed2 = st.columns(2)
+            with col_feed1:
+                with st.container(border=True):
+                    st.markdown("#### 💬 AI Analysis Feedback")
+                    st.caption("Help us calibrate the model. Do you agree with this credibility score?")
+                    
+                    user_agreement = st.radio("Verdict feedback:", ["Agree with AI", "Disagree with AI", "Neutral"], horizontal=True, key="feedback_agree")
+                    rating = st.slider("Rate accuracy (1 = poor, 5 = perfect):", 1, 5, 4, key="feedback_rating")
+                    feedback_notes = st.text_input("Optional notes:", placeholder="What did the model get right or wrong?", key="feedback_notes")
+                    
+                    if st.button("Submit Feedback", key="submit_feedback_btn"):
+                        st.success("🙏 Thank you! Your feedback has been logged to calibrate future models.")
+                        
+            with col_feed2:
+                with st.container(border=True):
+                    st.markdown("#### 🛠️ Fact-Checking Action Center")
+                    st.caption("Cross-reference this story on external trusted databases:")
+                    
+                    search_query = ""
+                    if article_text:
+                        search_query = "+".join(article_text.split()[:8])
+                    
+                    st.markdown(f"""
+                    <div style="display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 0.8rem;">
+                        <a href="https://www.snopes.com/?s={search_query}" target="_blank" style="text-decoration:none;">
+                            <button style="width:100%; text-align:left; background:rgba(255,255,255,0.02); color:var(--text-primary); border:1px solid rgba(255,255,255,0.06); padding:0.5rem 1rem; border-radius:8px; cursor:pointer; font-weight:600;">🔍 Search Snopes Fact-Check</button>
+                        </a>
+                        <a href="https://www.politifact.com/search/?q={search_query}" target="_blank" style="text-decoration:none;">
+                            <button style="width:100%; text-align:left; background:rgba(255,255,255,0.02); color:var(--text-primary); border:1px solid rgba(255,255,255,0.06); padding:0.5rem 1rem; border-radius:8px; cursor:pointer; font-weight:600;">⚖️ Search PolitiFact</button>
+                        </a>
+                        <a href="https://www.google.com/search?q={search_query}+fact+check" target="_blank" style="text-decoration:none;">
+                            <button style="width:100%; text-align:left; background:rgba(255,255,255,0.02); color:var(--text-primary); border:1px solid rgba(255,255,255,0.06); padding:0.5rem 1rem; border-radius:8px; cursor:pointer; font-weight:600;">🌐 Google Fact-Check Search</button>
+                        </a>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+        elif predict_clicked:
+            if "📝" in input_mode:
+                st.warning("⚠️ Please enter at least 50 characters of article text to analyze.")
+            elif article_text is None:
+                st.info("💡 **Tip:** If the website blocks automated access, switch to "
+                        "**📝 Paste Article Text** mode in the sidebar and paste the article manually.")
+            else:
+                st.warning("⚠️ The extracted article text is too short to analyze reliably. "
+                           "Try pasting the full article text directly instead.")
+
+    with tab_education:
+        st.markdown("## 📖 Media Literacy & Misinformation Hub")
+        st.markdown("---")
+        
+        st.markdown("""
+        <div style='background: rgba(240, 235, 225, 0.02); border: 1px solid var(--glass-border); padding: 1.5rem; border-radius: 14px; margin-bottom: 2rem;'>
+            <h3 style='margin-top:0; color: var(--accent);'>The Fight for Fact: Navigating the Post-Truth Era</h3>
+            <p>Today, we ingest more data in a single day than a 17th-century human consumed in an entire lifetime. In this deluge of information, sensational lies are mathematically optimized to spread faster and deeper than complex truths. Spotting fake news is no longer just a reading skill—it is a critical practice of digital self-defense and civic responsibility.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        col_ed1, col_ed2 = st.columns(2)
+        with col_ed1:
+            with st.container(border=True):
+                st.markdown("### 🛡️ Why Spotting Misinformation Matters")
+                st.markdown("""
+                In the digital age, misinformation spreads **six times faster** than verified facts. False stories carry high-stakes, real-world consequences:
+                
+                * 🩺 **Public Health & Safety:** False remedies, medical scams, and vaccine misinformation put lives in immediate danger by discouraging scientific treatment.
+                * 🗳️ **Democratic Integrity:** Coordinated disinformation campaigns polarize voters, manipulate elections, sow distrust in voting systems, and weaken democratic institutions.
+                * 🤝 **Social Cohesion Decay:** Continuous exposure to conspiracy theories leads to cynicism. When people stop believing professional journalism and scientific consensus, social trust collapses.
+                * 💸 **Economic Harms & Scams:** Fake financial news can trigger market volatility, manipulate stocks, and trick vulnerable people out of their life savings.
+                """)
+                
+            with st.container(border=True):
+                st.markdown("### 🧠 The Cognitive Hacks of Fake News")
+                st.markdown("""
+                Why do our brains naturally fall for deceptive articles? Cognitive science reveals several mental blindspots:
+                
+                * **Confirmation Bias:** We automatically favor and share information that confirms our existing worldviews, while rejecting contradicting evidence out-of-hand.
+                * **The Illusory Truth Effect:** Repetition breeds belief. If we hear a false statement repeated enough times, our brain begins to process it as true because it feels familiar and fluent.
+                * **Cognitive Ease vs. Strain:** Fake news is written to be simple, dramatic, and emotionally satisfying. True facts are often complex, dry, and require mental effort to parse.
+                * **Emotional Hijacking:** Clickbait exploits high-arousal emotions (anger, moral outrage, fear, or euphoria). When we are angry or shocked, our analytical prefrontal cortex shuts down, leading to impulsive sharing.
+                """)
+
+            with st.container(border=True):
+                st.markdown("### 🤖 Misinformation in the Age of AI")
+                st.markdown("""
+                The rise of generative AI has changed the scale and sophistication of fake news:
+                
+                * **Synthetic Articles:** Large Language Models can write thousands of convincing, grammatically perfect fake news posts in seconds, making bot farms highly scalable.
+                * **Deepfakes & Voice Clones:** AI-generated videos and audio clips of political leaders can manufacture statements that never happened.
+                * **Hyper-Targeted Disinformation:** AI algorithms can analyze user profiles and automatically generate custom-tailored conspiracies designed to appeal to specific psychological traits.
+                * **Verification Tip:** Look for visual inconsistencies in images (weird hands, asymmetrical faces) and verify quotes through multiple independent, verified news outlets.
+                """)
+
+        with col_ed2:
+            with st.container(border=True):
+                st.markdown("### 🔎 The S.I.F.T. Fact-Checking Framework")
+                st.markdown("""
+                Created by digital literacy pioneer Mike Caulfield, the **S.I.F.T.** method is a rapid, 4-step framework used by fact-checkers:
+                
+                1. 🛑 **Stop:** Before reading, reacting, or sharing, pause. Recognize if a headline triggers an intense emotion—that is a signal to slow down.
+                2. 🕵️‍♂️ **Investigate the Source:** Don't trust an unfamiliar site's "About" page. Search for the site externally. Check their history, editorial standards, and who funds them.
+                3. 🌐 **Find Better Coverage:** Do a quick search on the topic. Are reliable organizations (like Reuters, AP, BBC, or established local papers) reporting the same facts? If it is only on one site, it's likely false.
+                4. 🔍 **Trace Claims to Context:** Trace quotes, images, or data back to their original source. Disinformation often rips real statements or old photos out of context to distort their meaning.
+                """)
+                
+            with st.container(border=True):
+                st.markdown("### 📁 The Spectrum of Fake News")
+                st.markdown("""
+                Not all false information is the same. It exists on a spectrum:
+                
+                * 🔴 **Fabricated Content:** 100% false, intentionally manufactured to deceive or cause harm.
+                * 🟤 **Manipulated Content:** Real images or video edited to change the message (e.g., deepfakes or cropped photos).
+                * 🟡 **Misleading Context:** Genuine facts or images framed in a way that leads to an incorrect conclusion.
+                * 🔵 **Imposter Branding:** Impersonating trusted journalism brands (e.g., creating a site called `bbc-news-report.com`).
+                * 🟢 **Satire/Parody:** Written as humor or critique, but can mislead if shared out of context.
+                """)
+
+            with st.container(border=True):
+                st.markdown("### 📋 Interactive Credibility Self-Test")
+                st.markdown("Ask yourself these **5 quick questions** before sharing any article online:")
+                
+                q1 = st.checkbox("1. Does the headline contain loaded words, excessive punctuation (!!!), or ALL CAPS?")
+                q2 = st.checkbox("2. Is the publisher unknown, or is the URL slightly misspelled/mimicking a popular brand?")
+                q3 = st.checkbox("3. Is the story missing links, names of authors, or citations to primary sources?")
+                q4 = st.checkbox("4. Did I read the *entire* article, or did I just read the headline and share it?")
+                q5 = st.checkbox("5. Does this story make me feel highly angry, vindicated, or excited?")
+                
+                if q1 or q2 or q3 or q4 or q5:
+                    warnings_count = sum([q1, q2, q3, not q4, q5])
+                    if warnings_count >= 3:
+                        st.error("🚨 **High Risk:** This article has multiple red flags. We strongly recommend fact-checking before sharing.")
+                    elif warnings_count >= 1:
+                        st.warning("⚠️ **Caution Advised:** There are some suspicious attributes. Proceed with caution and verify.")
+                    else:
+                        st.success("✅ **Looks Clean:** You've verified the core hygiene items!")
+
+            with st.container(border=True):
+                st.markdown("### 🎮 Fact or Fiction? Test Your Intuition")
+                st.caption("Can you spot the difference between clickbait rumors and real news? Try this mini-game:")
+                
+                game_q = st.selectbox(
+                    "Select a headline to evaluate:",
+                    [
+                        "Choose a headline...",
+                        "1. 'NASA confirms a tiny asteroid has been temporarily captured by Earth's gravity as a mini-moon'",
+                        "2. 'Scientists discover complete cure for aging using organic broccoli concentrate'",
+                        "3. 'Bananas contain radioactive isotopes, making it lethal to consume more than three a day'"
+                    ],
+                    key="game_select"
+                )
+                
+                if game_q != "Choose a headline...":
+                    if "1. " in game_q:
+                        ans = st.radio("Is this headline Fact or Fiction?", ["Fact", "Fiction"], key="game_ans_1")
+                        eval_btn = st.button("Check Answer", key="game_btn_1")
+                        if eval_btn:
+                            if ans == "Fact":
+                                st.success("🎉 **Correct!** In late 2024, Earth temporarily captured a small asteroid named **2024 PT5** as a 'mini-moon' for approximately two months. It was widely reported by NASA and major astrophysics journals.")
+                            else:
+                                st.error("❌ **Incorrect.** This is actually a **Fact**! Earth temporarily captured asteroid 2024 PT5 as a mini-moon in late 2024.")
+                    elif "2. " in game_q:
+                        ans = st.radio("Is this headline Fact or Fiction?", ["Fact", "Fiction"], key="game_ans_2")
+                        eval_btn = st.button("Check Answer", key="game_btn_2")
+                        if eval_btn:
+                            if ans == "Fiction":
+                                st.success("🎉 **Correct!** This is **Fiction**. While broccoli contains healthy antioxidants, claims of a 'complete cure for aging' are sensationalized clickbait and unverified by medical science.")
+                            else:
+                                st.error("❌ **Incorrect.** This is **Fiction**! Although broccoli is nutritious, there is no medical cure for aging, and the headline is classic health misinformation.")
+                    elif "3. " in game_q:
+                        ans = st.radio("Is this headline Fact or Fiction?", ["Fact", "Fiction"], key="game_ans_3")
+                        eval_btn = st.button("Check Answer", key="game_btn_3")
+                        if eval_btn:
+                            if ans == "Fiction":
+                                st.success("🎉 **Correct!** This is **Fiction**. Bananas do contain trace amounts of radioactive Potassium-40, but you would need to eat **10 million bananas** in a single sitting to receive a lethal dose.")
+                            else:
+                                st.error("❌ **Incorrect.** This is **Fiction**! Eating three bananas a day is completely safe. The radioactivity is in micro-trace amounts, making this claim a deceptive fear-mongering myth.")
 
     st.markdown("""
     <div class="footer">
-        <p>🛡️ Fake News Detector v1.0 — Built with Streamlit, scikit-learn & NLP</p>
-        <p>⚠️ This tool is for educational purposes. Always verify information with trusted sources.</p>
+        <p>Fake News Detector v1.0 — Built with Streamlit, scikit-learn & NLP</p>
+        <p>This tool is for educational purposes. Always verify information with trusted sources.</p>
     </div>
     """, unsafe_allow_html=True)
 
+
+def main():
+    # Start the background update daemon exactly once with hidden console window
+    start_updater_daemon()
+
+    # Initialize session state variables from stored config
+    config = load_smtp_config()
+    if "smtp_user" not in st.session_state:
+        st.session_state.smtp_user = config.get("smtp_user", "")
+    if "smtp_password" not in st.session_state:
+        st.session_state.smtp_password = config.get("smtp_password", "")
+    if "smtp_server" not in st.session_state:
+        st.session_state.smtp_server = config.get("smtp_server", "smtp.gmail.com")
+    if "smtp_port" not in st.session_state:
+        st.session_state.smtp_port = config.get("smtp_port", 587)
+    if "page" not in st.session_state:
+        st.session_state.page = "landing"
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
+    if "email" not in st.session_state:
+        st.session_state.email = ""
+    if "otp_code" not in st.session_state:
+        st.session_state.otp_code = None
+    if "otp_sent" not in st.session_state:
+        st.session_state.otp_sent = False
+
+    st.markdown(f"""
+    <div class="hero-header">
+        <div style="text-align: center; margin-bottom: 1rem;">
+            <img src="{logo_base64}" style="width: 85px; height: 85px; border-radius: 50%; border: 2px solid var(--brass); box-shadow: 0 0 15px var(--brass-glow); padding: 3px; background: rgba(18, 15, 14, 0.8);">
+        </div>
+        <h1>Fake News & Misinformation Detector</h1>
+        <div class="hero-divider"></div>
+        <p>AI-powered credibility analysis using NLP & Machine Learning</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Page routing logic
+    if st.session_state.page == "landing":
+        render_landing()
+    elif st.session_state.page == "login":
+        render_login()
+    elif st.session_state.page == "dashboard":
+        # Force authentication block
+        if not st.session_state.logged_in:
+            st.session_state.page = "login"
+            st.rerun()
+        render_dashboard()
+
+    # Inject JavaScript scroll-reveal animation using iframe component
+    st.components.v1.html("""
+    <script>
+        const parentDoc = window.parent.document;
+        if (!parentDoc.getElementById('scroll-reveal-style')) {
+            const style = parentDoc.createElement('style');
+            style.id = 'scroll-reveal-style';
+            style.textContent = `
+                .scroll-reveal {
+                    opacity: 0 !important;
+                    transform: translateY(30px) scale(0.97) !important;
+                    transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), 
+                                transform 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+                                filter 0.8s cubic-bezier(0.16, 1, 0.3, 1) !important;
+                    filter: blur(8px) !important;
+                    will-change: transform, opacity, filter;
+                }
+                .scroll-reveal.visible {
+                    opacity: 1 !important;
+                    transform: translateY(0) scale(1) !important;
+                    filter: blur(0) !important;
+                }
+            `;
+            parentDoc.head.appendChild(style);
+        }
+
+        const observerOptions = {
+            root: null,
+            rootMargin: '0px 0px -40px 0px',
+            threshold: 0.05
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, observerOptions);
+
+        function setupReveal() {
+            const targets = parentDoc.querySelectorAll('div[data-testid="stVerticalBlockBorderWrapper"], .metric-card, .info-box, .verdict-real, .verdict-fake, .verdict-uncertain, .stAlert, .sentence-high, .sentence-medium, .sentence-low');
+            targets.forEach(el => {
+                if (!el.classList.contains('scroll-reveal')) {
+                    el.classList.add('scroll-reveal');
+                    observer.observe(el);
+                }
+            });
+        }
+        setInterval(setupReveal, 500);
+        setupReveal();
+    </script>
+    """, height=0)
 
 if __name__ == "__main__":
     main()
