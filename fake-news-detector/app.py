@@ -706,7 +706,16 @@ def main():
                 st.markdown(f'<div style="margin-top: 0.5rem;">{badges_html}</div>', unsafe_allow_html=True)
 
     elif predict_clicked:
-        st.warning("⚠️ Please enter at least 50 characters of article text to analyze.")
+        if "📝" in input_mode:
+            # User pasted text but it was too short
+            st.warning("⚠️ Please enter at least 50 characters of article text to analyze.")
+        elif article_text is None:
+            # URL mode — extraction already showed an error via st.error()
+            st.info("💡 **Tip:** If the website blocks automated access, switch to "
+                    "**📝 Paste Article Text** mode in the sidebar and paste the article manually.")
+        else:
+            st.warning("⚠️ The extracted article text is too short to analyze reliably. "
+                       "Try pasting the full article text directly instead.")
 
     st.markdown("""
     <div class="footer">
