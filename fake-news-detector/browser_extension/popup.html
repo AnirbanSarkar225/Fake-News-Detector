@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      width: 320px;
+      margin: 0;
+      padding: 15px;
+      background: #090706;
+      color: #f5f2eb;
+    }
+    .header {
+      text-align: center;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      padding-bottom: 10px;
+      margin-bottom: 15px;
+    }
+    .header h1 {
+      font-size: 16px;
+      margin: 0;
+      color: #e15b3e;
+    }
+    .content {
+      font-size: 12px;
+    }
+    .btn {
+      width: 100%;
+      background: linear-gradient(135deg, #e15b3e, #d49b4c);
+      color: #f5f2eb;
+      border: none;
+      padding: 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+    .btn:hover {
+      opacity: 0.9;
+    }
+    .result-box {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      padding: 10px;
+      border-radius: 6px;
+      margin-top: 10px;
+      display: none;
+    }
+    .verdict-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    .real { background: #5f8a6b; }
+    .fake { background: #d45d4e; }
+    textarea {
+      width: 100%;
+      height: 80px;
+      background: rgba(0,0,0,0.5);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #f5f2eb;
+      border-radius: 4px;
+      padding: 5px;
+      box-sizing: border-box;
+      resize: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🛡️ TruthShield Credibility</h1>
+  </div>
+  <div class="content">
+    <label for="textInput">Highlighted Article Text:</label>
+    <textarea id="textInput" placeholder="Highlight text on a web page and open this popup, or paste it here..."></textarea>
+    
+    <button id="verifyBtn" class="btn">Analyze Text</button>
+    
+    <div id="resultBox" class="result-box">
+      <div id="verdict" class="verdict-badge"></div>
+      <div id="confidence"></div>
+      <div id="summary" style="margin-top: 8px; font-style: italic; color: #beb3a6;"></div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

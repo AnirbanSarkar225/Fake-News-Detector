@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "TruthShield Credibility Checker",
+  "version": "1.0",
+  "description": "Verify the credibility of any news article or web page text instantly.",
+  "permissions": [
+    "activeTab",
+    "contextMenus"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

@@ -26,3 +26,16 @@ Thumbs.db
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Sensitive credentials & API secrets
+assets/smtp_config.json
+.env
+.env.local
+.env.*
+*.env
+*.key
+
+# Local Databases
+data/truthshield.db
+*.db
+
