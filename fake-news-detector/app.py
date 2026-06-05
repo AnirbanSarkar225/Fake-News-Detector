@@ -23,6 +23,7 @@ import plotly.graph_objects as go
 import numpy as np
 import base64
 import json
+import sqlite3
 import random
 import re
 
@@ -653,6 +654,56 @@ st.markdown("""
             padding: 1.2rem !important;
         }
     }
+
+    /* ══════════════════════════════════════════════════════════
+       EDUCATIONAL CARDS — Premium Tactile Panels
+       ══════════════════════════════════════════════════════════ */
+    .edu-card {
+        background: rgba(255, 255, 255, 0.02) !important;
+        border: 1px solid rgba(255, 255, 255, 0.03) !important;
+        border-left: 4px solid var(--accent) !important;
+        border-radius: 12px;
+        padding: 1.1rem 1.3rem;
+        margin: 0.8rem 0;
+        box-shadow: 
+            var(--shadow-recessed),
+            0 2px 4px rgba(0,0,0,0.2);
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        text-align: left !important;
+    }
+    .edu-card:hover {
+        background: rgba(255, 255, 255, 0.045) !important;
+        border-color: rgba(255, 255, 255, 0.08) !important;
+        transform: translateX(4px) scale(1.005);
+        box-shadow: 
+            inset 0 2px 4px rgba(0,0,0,0.4),
+            0 8px 20px rgba(0,0,0,0.3);
+    }
+    .edu-icon {
+        font-size: 1.4rem;
+        margin-top: 0.1rem;
+        flex-shrink: 0;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+    }
+    .edu-body {
+        flex-grow: 1;
+    }
+    .edu-title {
+        font-weight: 700;
+        color: var(--text-primary) !important;
+        font-size: 1rem;
+        font-family: var(--font-heading);
+        text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    }
+    .edu-desc {
+        font-size: 0.86rem;
+        color: var(--text-secondary) !important;
+        margin-top: 0.3rem;
+        line-height: 1.5;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -824,6 +875,75 @@ def predict_article(text, model, preprocessor):
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+
+def get_db_connection():
+    db_path = os.path.join(SCRIPT_DIR, "data", "truthshield.db")
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            email TEXT PRIMARY KEY,
+            last_login DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_email TEXT,
+            title TEXT,
+            text TEXT,
+            prediction TEXT,
+            confidence REAL,
+            credibility REAL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_email) REFERENCES users(email)
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def save_user(email):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO users (email, last_login) 
+        VALUES (?, CURRENT_TIMESTAMP)
+        ON CONFLICT(email) DO UPDATE SET last_login=CURRENT_TIMESTAMP
+    """, (email,))
+    conn.commit()
+    conn.close()
+
+def get_last_user():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT email FROM users ORDER BY last_login DESC LIMIT 1")
+    row = cursor.fetchone()
+    conn.close()
+    return row['email'] if row else ""
+
+def save_history(email, title, text, prediction, confidence, credibility):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO history (user_email, title, text, prediction, confidence, credibility)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (email, title, text, prediction, confidence, credibility))
+    conn.commit()
+    conn.close()
+
+def get_user_history(email):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM history WHERE user_email = ? ORDER BY timestamp DESC", (email,))
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
 
 def load_smtp_config():
     """Load SMTP configurations from local storage."""
@@ -1025,65 +1145,16 @@ def render_login():
             </div>
             """, unsafe_allow_html=True)
             
-            email_input = st.text_input("Enter your Gmail Address:", placeholder="name@gmail.com", key="login_email")
+            # Prefill last logged-in email
+            last_email = get_last_user()
+            email_input = st.text_input("Enter your Gmail Address:", value=last_email, placeholder="name@gmail.com", key="login_email")
             
-            # Load stored config
-            stored_config = load_smtp_config()
-            is_configured = bool(stored_config.get("smtp_user") and stored_config.get("smtp_password"))
-            
-            # Show configuration status or expander
-            if is_configured:
-                st.markdown("<div style='background:rgba(76,112,91,0.04); border:1px solid var(--success-border); padding:0.8rem; border-radius:8px; margin-bottom:1rem; font-size:0.85rem;'><span style='color:var(--success); font-weight:bold;'>✔ SMTP Server Configured</span><br><span style='font-size:0.75rem; color:var(--text-secondary);'>Credentials are stored securely on disk. Next logins won't expose them.</span></div>", unsafe_allow_html=True)
-                change_smtp = st.checkbox("🔄 Override/Change SMTP Settings", key="change_smtp_settings")
-            else:
-                change_smtp = True
-                
-            if change_smtp:
-                with st.expander("⚙️ SMTP Email Server Settings", expanded=not is_configured):
-                    st.caption("To send actual emails, enter your SMTP sender account credentials below:")
-                    smtp_user_input = st.text_input("SMTP User (Gmail Address):", value=st.session_state.get("smtp_user", ""), placeholder="your.sender@gmail.com", key="setup_smtp_user")
-                    smtp_pass_input = st.text_input("SMTP App Password:", value="", type="password", placeholder="xxxx xxxx xxxx xxxx", key="setup_smtp_pass")
-                    
-                    col_smtp1, col_smtp2 = st.columns(2)
-                    with col_smtp1:
-                        smtp_server_input = st.text_input("SMTP Server:", value=st.session_state.get("smtp_server", "smtp.gmail.com"), key="setup_smtp_server")
-                    with col_smtp2:
-                        smtp_port_input = st.number_input("SMTP Port:", value=int(st.session_state.get("smtp_port", 587)), step=1, key="setup_smtp_port")
-                        
-                    if smtp_user_input:
-                        st.session_state.smtp_user = smtp_user_input.strip()
-                    if smtp_pass_input:
-                        st.session_state.smtp_password = smtp_pass_input.strip()
-                    st.session_state.smtp_server = smtp_server_input.strip()
-                    st.session_state.smtp_port = int(smtp_port_input)
-                    
-                    st.markdown("""
-                    <div style="font-size:0.78rem; color:var(--text-muted); margin-top: 0.5rem;">
-                        💡 <b>Gmail Setup Note:</b> Google requires you to use an <b>App Password</b>, not your normal password.
-                        <ol style="margin-left:-15px; margin-top:0.2rem; margin-bottom:0px; color:var(--text-muted);">
-                            <li>Go to your <a href="https://myaccount.google.com/" target="_blank" style="color:var(--accent);">Google Account Settings</a>.</li>
-                            <li>Enable <b>2-Step Verification</b> under the <i>Security</i> tab.</li>
-                            <li>Search for <b>App Passwords</b> in the search bar.</li>
-                            <li>Generate a new App Password (e.g., name it "News Detector") and paste the 16-character code above.</li>
-                        </ol>
-                    </div>
-                    """, unsafe_allow_html=True)
-
             if not st.session_state.otp_sent:
                 if st.button("Send Verification Code", use_container_width=True, type="primary", key="send_otp_btn"):
                     if email_input and re.match(r"[^@]+@[^@]+\.[^@]+", email_input.strip()):
                         otp = str(random.randint(100000, 999999))
                         st.session_state.otp_code = otp
                         st.session_state.email = email_input.strip()
-                        
-                        # Save credentials if changed
-                        user_val = st.session_state.get("smtp_user")
-                        pass_val = st.session_state.get("smtp_password")
-                        server_val = st.session_state.get("smtp_server", "smtp.gmail.com")
-                        port_val = st.session_state.get("smtp_port", 587)
-                        
-                        if user_val and pass_val:
-                            save_smtp_config(user_val, pass_val, server_val, port_val)
                         
                         with st.spinner("✉️ Sending verification code..."):
                             success, msg = send_otp_email(email_input.strip(), otp)
@@ -1106,6 +1177,7 @@ def render_login():
                         if otp_input.strip() == st.session_state.otp_code:
                             st.session_state.logged_in = True
                             st.session_state.page = "dashboard"
+                            save_user(st.session_state.email)
                             st.success("✅ Signed in successfully!")
                             st.rerun()
                         else:
@@ -1166,6 +1238,7 @@ def render_dashboard():
             "Input Method",
             ["📝 Paste Article Text", "🔗 Enter URL"],
             index=0,
+            key="input_method_select"
         )
         st.markdown("---")
         st.markdown("### Model & Dataset")
@@ -1198,7 +1271,36 @@ def render_dashboard():
         </div>
         """, unsafe_allow_html=True)
 
-    tab_analyze, tab_education = st.tabs(["🔍 Credibility Analyzer", "📖 Media Literacy Hub"])
+        st.markdown("---")
+        # Collapsible SMTP settings in dashboard sidebar for Admin use
+        with st.expander("⚙️ Server SMTP Configuration", expanded=False):
+            st.caption("Configure the Gmail sender parameters for OTP codes:")
+            smtp_user_input = st.text_input("SMTP User (Gmail):", value=st.session_state.get("smtp_user", ""), placeholder="your.sender@gmail.com", key="setup_smtp_user")
+            smtp_pass_input = st.text_input("SMTP App Password:", value=st.session_state.get("smtp_password", ""), type="password", placeholder="xxxx xxxx xxxx xxxx", key="setup_smtp_pass")
+            
+            col_smtp1, col_smtp2 = st.columns(2)
+            with col_smtp1:
+                smtp_server_input = st.text_input("SMTP Server:", value=st.session_state.get("smtp_server", "smtp.gmail.com"), key="setup_smtp_server")
+            with col_smtp2:
+                smtp_port_input = st.number_input("SMTP Port:", value=int(st.session_state.get("smtp_port", 587)), step=1, key="setup_smtp_port")
+                
+            if smtp_user_input:
+                st.session_state.smtp_user = smtp_user_input.strip()
+            if smtp_pass_input:
+                st.session_state.smtp_password = smtp_pass_input.strip()
+            st.session_state.smtp_server = smtp_server_input.strip()
+            st.session_state.smtp_port = int(smtp_port_input)
+            
+            # Save config button
+            if st.button("Save Server Config", key="save_smtp_config_btn"):
+                user_val = st.session_state.get("smtp_user")
+                pass_val = st.session_state.get("smtp_password")
+                if user_val and pass_val:
+                    save_smtp_config(user_val, pass_val, st.session_state.smtp_server, st.session_state.smtp_port)
+                    st.success("Config saved persistently!")
+                    st.rerun()
+
+    tab_analyze, tab_education, tab_history = st.tabs(["🔍 Credibility Analyzer", "📖 Media Literacy Hub", "📋 Analysis History"])
 
     with tab_analyze:
         article_text = None
@@ -1251,6 +1353,21 @@ def render_dashboard():
         if predict_clicked and article_text and len(article_text.strip()) > 50:
             with st.spinner("🧠 Analyzing article with AI..."):
                 results = predict_article(article_text, model, preprocessor)
+
+            # Save check to database history
+            words_list = article_text.strip().split()
+            title_prefix = " ".join(words_list[:6]) + ("..." if len(words_list) > 6 else "")
+            try:
+                save_history(
+                    email=st.session_state.email,
+                    title=title_prefix,
+                    text=article_text,
+                    prediction=results['prediction'],
+                    confidence=results['confidence'],
+                    credibility=results['credibility']
+                )
+            except Exception:
+                pass
 
             st.markdown("---")
             st.markdown("## Analysis Results")
@@ -1454,59 +1571,183 @@ def render_dashboard():
             with st.container(border=True):
                 st.markdown("### 🛡️ Why Spotting Misinformation Matters")
                 st.markdown("""
-                In the digital age, misinformation spreads **six times faster** than verified facts. False stories carry high-stakes, real-world consequences:
-                
-                * 🩺 **Public Health & Safety:** False remedies, medical scams, and vaccine misinformation put lives in immediate danger by discouraging scientific treatment.
-                * 🗳️ **Democratic Integrity:** Coordinated disinformation campaigns polarize voters, manipulate elections, sow distrust in voting systems, and weaken democratic institutions.
-                * 🤝 **Social Cohesion Decay:** Continuous exposure to conspiracy theories leads to cynicism. When people stop believing professional journalism and scientific consensus, social trust collapses.
-                * 💸 **Economic Harms & Scams:** Fake financial news can trigger market volatility, manipulate stocks, and trick vulnerable people out of their life savings.
-                """)
+                <div style="margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-secondary);">
+                    In the digital age, misinformation spreads <b>six times faster</b> than verified facts. False stories carry high-stakes, real-world consequences:
+                </div>
+                <div class="edu-card" style="border-left-color: #3c6c8c;">
+                    <span class="edu-icon">🩺</span>
+                    <div class="edu-body">
+                        <div class="edu-title">Public Health & Safety</div>
+                        <div class="edu-desc">False remedies, medical scams, and vaccine misinformation put lives in immediate danger by discouraging scientific treatment.</div>
+                    </div>
+                </div>
+                <div class="edu-card" style="border-left-color: #c68b3f;">
+                    <span class="edu-icon">🗳️</span>
+                    <div class="edu-body">
+                        <div class="edu-title">Democratic Integrity</div>
+                        <div class="edu-desc">Coordinated disinformation campaigns polarize voters, manipulate elections, sow distrust in voting systems, and weaken democratic institutions.</div>
+                    </div>
+                </div>
+                <div class="edu-card" style="border-left-color: #557a46;">
+                    <span class="edu-icon">🤝</span>
+                    <div class="edu-body">
+                        <div class="edu-title">Social Cohesion Decay</div>
+                        <div class="edu-desc">Continuous exposure to conspiracy theories leads to cynicism. When people stop believing professional journalism, social trust collapses.</div>
+                    </div>
+                </div>
+                <div class="edu-card" style="border-left-color: #d35230;">
+                    <span class="edu-icon">💸</span>
+                    <div class="edu-body">
+                        <div class="edu-title">Economic Harms & Scams</div>
+                        <div class="edu-desc">Fake financial news can trigger market volatility, manipulate stocks, and trick vulnerable people out of their life savings.</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
                 
             with st.container(border=True):
                 st.markdown("### 🧠 The Cognitive Hacks of Fake News")
                 st.markdown("""
-                Why do our brains naturally fall for deceptive articles? Cognitive science reveals several mental blindspots:
-                
-                * **Confirmation Bias:** We automatically favor and share information that confirms our existing worldviews, while rejecting contradicting evidence out-of-hand.
-                * **The Illusory Truth Effect:** Repetition breeds belief. If we hear a false statement repeated enough times, our brain begins to process it as true because it feels familiar and fluent.
-                * **Cognitive Ease vs. Strain:** Fake news is written to be simple, dramatic, and emotionally satisfying. True facts are often complex, dry, and require mental effort to parse.
-                * **Emotional Hijacking:** Clickbait exploits high-arousal emotions (anger, moral outrage, fear, or euphoria). When we are angry or shocked, our analytical prefrontal cortex shuts down, leading to impulsive sharing.
-                """)
+                <div style="margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-secondary);">
+                    Why do our brains naturally fall for deceptive articles? Cognitive science reveals several mental blindspots:
+                </div>
+                <div class="edu-card" style="border-left-color: #c68b3f;">
+                    <span class="edu-icon">🧭</span>
+                    <div class="edu-body">
+                        <div class="edu-title">Confirmation Bias</div>
+                        <div class="edu-desc">We automatically favor and share information that confirms our existing worldviews, while rejecting contradicting evidence out-of-hand.</div>
+                    </div>
+                </div>
+                <div class="edu-card" style="border-left-color: #d35230;">
+                    <span class="edu-icon">🔁</span>
+                    <div class="edu-body">
+                        <div class="edu-title">The Illusory Truth Effect</div>
+                        <div class="edu-desc">Repetition breeds belief. If we hear a false statement repeated enough times, our brain begins to process it as true because it feels familiar.</div>
+                    </div>
+                </div>
+                <div class="edu-card" style="border-left-color: #3c6c8c;">
+                    <span class="edu-icon">💡</span>
+                    <div class="edu-body">
+                        <div class="edu-title">Cognitive Ease vs. Strain</div>
+                        <div class="edu-desc">Fake news is written to be simple, dramatic, and emotionally satisfying. True facts are complex and require mental effort to parse.</div>
+                    </div>
+                </div>
+                <div class="edu-card" style="border-left-color: #557a46;">
+                    <span class="edu-icon">🧠</span>
+                    <div class="edu-body">
+                        <div class="edu-title">Emotional Hijacking</div>
+                        <div class="edu-desc">Clickbait triggers intense outrage or fear. When we are emotional, our prefrontal cortex shuts down, leading to impulsive sharing.</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
             with st.container(border=True):
                 st.markdown("### 🤖 Misinformation in the Age of AI")
                 st.markdown("""
-                The rise of generative AI has changed the scale and sophistication of fake news:
-                
-                * **Synthetic Articles:** Large Language Models can write thousands of convincing, grammatically perfect fake news posts in seconds, making bot farms highly scalable.
-                * **Deepfakes & Voice Clones:** AI-generated videos and audio clips of political leaders can manufacture statements that never happened.
-                * **Hyper-Targeted Disinformation:** AI algorithms can analyze user profiles and automatically generate custom-tailored conspiracies designed to appeal to specific psychological traits.
-                * **Verification Tip:** Look for visual inconsistencies in images (weird hands, asymmetrical faces) and verify quotes through multiple independent, verified news outlets.
-                """)
+                <div style="margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-secondary);">
+                    The rise of generative AI has changed the scale and sophistication of fake news:
+                </div>
+                <div class="edu-card" style="border-left-color: #d35230;">
+                    <span class="edu-icon">🤖</span>
+                    <div class="edu-body">
+                        <div class="edu-title">Synthetic Articles</div>
+                        <div class="edu-desc">Large Language Models can write thousands of convincing, grammatically perfect fake news posts in seconds, making bot farms highly scalable.</div>
+                    </div>
+                </div>
+                <div class="edu-card" style="border-left-color: #c68b3f;">
+                    <span class="edu-icon">👁️</span>
+                    <div class="edu-body">
+                        <div class="edu-title">Deepfakes & Voice Clones</div>
+                        <div class="edu-desc">AI-generated videos and audio clips of political leaders can manufacture statements and events that never actually happened.</div>
+                    </div>
+                </div>
+                <div class="edu-card" style="border-left-color: #3c6c8c;">
+                    <span class="edu-icon">🎯</span>
+                    <div class="edu-body">
+                        <div class="edu-title">Hyper-Targeted Disinformation</div>
+                        <div class="edu-desc">AI algorithms analyze user profiles and automatically generate custom-tailored conspiracies designed to appeal to specific psychological traits.</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
         with col_ed2:
             with st.container(border=True):
                 st.markdown("### 🔎 The S.I.F.T. Fact-Checking Framework")
                 st.markdown("""
-                Created by digital literacy pioneer Mike Caulfield, the **S.I.F.T.** method is a rapid, 4-step framework used by fact-checkers:
-                
-                1. 🛑 **Stop:** Before reading, reacting, or sharing, pause. Recognize if a headline triggers an intense emotion—that is a signal to slow down.
-                2. 🕵️‍♂️ **Investigate the Source:** Don't trust an unfamiliar site's "About" page. Search for the site externally. Check their history, editorial standards, and who funds them.
-                3. 🌐 **Find Better Coverage:** Do a quick search on the topic. Are reliable organizations (like Reuters, AP, BBC, or established local papers) reporting the same facts? If it is only on one site, it's likely false.
-                4. 🔍 **Trace Claims to Context:** Trace quotes, images, or data back to their original source. Disinformation often rips real statements or old photos out of context to distort their meaning.
-                """)
+                <div style="margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-secondary);">
+                    Created by digital literacy experts, the <b>S.I.F.T.</b> method is a rapid, 4-step framework used by fact-checkers:
+                </div>
+                <div class="edu-card" style="border-left-color: #b24339;">
+                    <span class="edu-icon">🛑</span>
+                    <div class="edu-body">
+                        <div class="edu-title">1. Stop</div>
+                        <div class="edu-desc">Before reading, reacting, or sharing, pause. Recognize if a headline triggers an intense emotion—that is a signal to slow down.</div>
+                    </div>
+                </div>
+                <div class="edu-card" style="border-left-color: #c68b3f;">
+                    <span class="edu-icon">🕵️‍♂️</span>
+                    <div class="edu-body">
+                        <div class="edu-title">2. Investigate the Source</div>
+                        <div class="edu-desc">Don't trust an unfamiliar site's "About" page. Search for the site externally. Check their history, editorial standards, and who funds them.</div>
+                    </div>
+                </div>
+                <div class="edu-card" style="border-left-color: #3c6c8c;">
+                    <span class="edu-icon">🌐</span>
+                    <div class="edu-body">
+                        <div class="edu-title">3. Find Better Coverage</div>
+                        <div class="edu-desc">Do a quick search. Are reliable organizations (like Reuters, AP, BBC, or established local papers) reporting the same facts? If it is only on one site, it's likely false.</div>
+                    </div>
+                </div>
+                <div class="edu-card" style="border-left-color: #4c705b;">
+                    <span class="edu-icon">🔍</span>
+                    <div class="edu-body">
+                        <div class="edu-title">4. Trace Claims to Context</div>
+                        <div class="edu-desc">Trace quotes, images, or data back to their original source. Disinformation often rips real statements or old photos out of context to distort their meaning.</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
                 
             with st.container(border=True):
                 st.markdown("### 📁 The Spectrum of Fake News")
                 st.markdown("""
-                Not all false information is the same. It exists on a spectrum:
-                
-                * 🔴 **Fabricated Content:** 100% false, intentionally manufactured to deceive or cause harm.
-                * 🟤 **Manipulated Content:** Real images or video edited to change the message (e.g., deepfakes or cropped photos).
-                * 🟡 **Misleading Context:** Genuine facts or images framed in a way that leads to an incorrect conclusion.
-                * 🔵 **Imposter Branding:** Impersonating trusted journalism brands (e.g., creating a site called `bbc-news-report.com`).
-                * 🟢 **Satire/Parody:** Written as humor or critique, but can mislead if shared out of context.
-                """)
+                <div style="margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-secondary);">
+                    Not all false information is the same. It exists on a spectrum:
+                </div>
+                <div class="edu-card" style="border-left-color: #b24339;">
+                    <span class="edu-icon">🔴</span>
+                    <div class="edu-body">
+                        <div class="edu-title">Fabricated Content</div>
+                        <div class="edu-desc">100% false, intentionally manufactured to deceive or cause harm.</div>
+                    </div>
+                </div>
+                <div class="edu-card" style="border-left-color: #8c7b6c;">
+                    <span class="edu-icon">🟤</span>
+                    <div class="edu-body">
+                        <div class="edu-title">Manipulated Content</div>
+                        <div class="edu-desc">Real images or video edited to change the message (e.g., deepfakes or cropped photos).</div>
+                    </div>
+                </div>
+                <div class="edu-card" style="border-left-color: #c68b3f;">
+                    <span class="edu-icon">🟡</span>
+                    <div class="edu-body">
+                        <div class="edu-title">Misleading Context</div>
+                        <div class="edu-desc">Genuine facts or images framed in a way that leads to an incorrect conclusion.</div>
+                    </div>
+                </div>
+                <div class="edu-card" style="border-left-color: #3c6c8c;">
+                    <span class="edu-icon">🔵</span>
+                    <div class="edu-body">
+                        <div class="edu-title">Imposter Branding</div>
+                        <div class="edu-desc">Impersonating trusted journalism brands (e.g., creating a site called <code>bbc-news-report.com</code>).</div>
+                    </div>
+                </div>
+                <div class="edu-card" style="border-left-color: #4c705b;">
+                    <span class="edu-icon">🟢</span>
+                    <div class="edu-body">
+                        <div class="edu-title">Satire / Parody</div>
+                        <div class="edu-desc">Written as humor or critique, but can mislead if shared out of context on social feeds.</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
             with st.container(border=True):
                 st.markdown("### 📋 Interactive Credibility Self-Test")
@@ -1577,6 +1818,12 @@ def render_dashboard():
 
 
 def main():
+    # Initialize the local SQLite database
+    try:
+        init_db()
+    except Exception:
+        pass
+
     # Start the background update daemon exactly once with hidden console window
     start_updater_daemon()
 
