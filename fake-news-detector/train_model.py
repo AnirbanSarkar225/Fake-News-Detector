@@ -230,6 +230,59 @@ def train_model():
     joblib.dump(preprocessor, preprocessor_path)
     print(f"   💾 Preprocessor saved to: {preprocessor_path}")
 
+    # ── Save evaluation metrics to JSON for dynamic dashboard loading ──
+    import json
+    from sklearn.metrics import precision_score, recall_score, f1_score
+
+    precision = precision_score(y_test, y_pred, pos_label='REAL')
+    recall = recall_score(y_test, y_pred, pos_label='REAL')
+    f1 = f1_score(y_test, y_pred, pos_label='REAL')
+
+    # Generate ROC-like data using decision function
+    try:
+        decision_scores = pipeline.decision_function(X_test)
+        # Create binned FPR/TPR for visualization
+        thresholds = np.linspace(decision_scores.min(), decision_scores.max(), 100)
+        fpr_list = []
+        tpr_list = []
+        y_test_binary = (y_test == 'REAL').astype(int)
+        for thresh in thresholds:
+            y_pred_thresh = (decision_scores >= thresh).astype(int)
+            tp = ((y_pred_thresh == 1) & (y_test_binary == 1)).sum()
+            fp = ((y_pred_thresh == 1) & (y_test_binary == 0)).sum()
+            fn = ((y_pred_thresh == 0) & (y_test_binary == 1)).sum()
+            tn = ((y_pred_thresh == 0) & (y_test_binary == 0)).sum()
+            fpr_val = fp / max(fp + tn, 1)
+            tpr_val = tp / max(tp + fn, 1)
+            fpr_list.append(float(fpr_val))
+            tpr_list.append(float(tpr_val))
+        # Compute AUC using trapezoidal rule
+        auc_score = float(np.abs(np.trapz(tpr_list, fpr_list)))
+    except Exception:
+        fpr_list = []
+        tpr_list = []
+        auc_score = 0.0
+
+    metrics = {
+        "accuracy": float(accuracy),
+        "precision": float(precision),
+        "recall": float(recall),
+        "f1_score": float(f1),
+        "confusion_matrix": cm.tolist(),
+        "labels": ["FAKE", "REAL"],
+        "train_size": int(len(X_train)),
+        "test_size": int(len(X_test)),
+        "total_articles": int(len(df)),
+        "roc_fpr": fpr_list,
+        "roc_tpr": tpr_list,
+        "roc_auc": auc_score
+    }
+
+    metrics_path = os.path.join(model_dir, "evaluation_metrics.json")
+    with open(metrics_path, "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2)
+    print(f"   📊 Evaluation metrics saved to: {metrics_path}")
+
     print()
     print("╔══════════════════════════════════════════════════════════╗")
     print("║              ✅ Training Complete!                       ║")
