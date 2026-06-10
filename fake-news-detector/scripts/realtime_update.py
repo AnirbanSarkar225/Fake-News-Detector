@@ -22,9 +22,10 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(SCRIPT_DIR, "model", "fake_news_model.pkl")
-PREPROCESSOR_PATH = os.path.join(SCRIPT_DIR, "model", "preprocessor.pkl")
-NEWS_CSV_PATH = os.path.join(SCRIPT_DIR, "data", "news.csv")
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+MODEL_PATH = os.path.join(PROJECT_ROOT, "model", "model_final.pkl")
+PREPROCESSOR_PATH = os.path.join(PROJECT_ROOT, "model", "preprocessor.pkl")
+NEWS_CSV_PATH = os.path.join(PROJECT_ROOT, "data", "news.csv")
 
 # Google Fact Check Tools API Endpoint (Uses standard query for latest claims)
 # Replace 'YOUR_GOOGLE_API_KEY' with your actual free API key from Google Cloud Console.

@@ -23,8 +23,11 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-# Resolve all paths relative to this script's directory, not the CWD
+# Resolve all paths relative to project root, not the scripts directory
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+sys.path.insert(0, PROJECT_ROOT)
+
 import joblib
 import pandas as pd
 import numpy as np
@@ -39,7 +42,6 @@ from sklearn.metrics import (
 )
 from tqdm import tqdm
 
-sys.path.insert(0, SCRIPT_DIR)
 from utils.preprocess import TextPreprocessor
 
 
@@ -58,7 +60,7 @@ def load_dataset(data_dir: str = None) -> pd.DataFrame:
         DataFrame with 'text' and 'label' columns
     """
     if data_dir is None:
-        data_dir = os.path.join(SCRIPT_DIR, "data")
+        data_dir = os.path.join(PROJECT_ROOT, "data")
     combined_path = os.path.join(data_dir, "news.csv")
     fake_path = os.path.join(data_dir, "Fake.csv")
     true_path = os.path.join(data_dir, "True.csv")
@@ -218,7 +220,7 @@ def train_model():
     print(f"   {'True REAL':>12}   {cm[1][0]:>5}      {cm[1][1]:>5}")
     print()
 
-    model_dir = os.path.join(SCRIPT_DIR, "model")
+    model_dir = os.path.join(PROJECT_ROOT, "model")
     os.makedirs(model_dir, exist_ok=True)
     model_path = os.path.join(model_dir, "fake_news_model.pkl")
 

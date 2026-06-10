@@ -14,7 +14,8 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, SCRIPT_DIR)
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+sys.path.insert(0, PROJECT_ROOT)
 
 from utils.preprocess import TextPreprocessor
 
@@ -47,7 +48,7 @@ def load_model():
     """Load the trained model and preprocessor."""
     global model, preprocessor
     try:
-        model_path = os.path.join(SCRIPT_DIR, "model", "model_final.pkl")
+        model_path = os.path.join(PROJECT_ROOT, "model", "fake_news_model.pkl")
         if os.path.exists(model_path):
             model = joblib.load(model_path)
         else:
