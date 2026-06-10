@@ -858,21 +858,65 @@ def explain_pattern(pat):
 
 
 def predict_article(text, model, preprocessor):
-    """Run prediction and analysis on article text."""
+    """Run prediction and analysis on article text.
+
+    Blends the ML model's decision with rule-based NLP indicators so that
+    short, well-written articles aren't penalised by low TF-IDF signal.
+    """
     processed = preprocessor.preprocess_for_model(text)
 
     prediction = model.predict([processed])[0]
 
     try:
         decision_score = model.decision_function([processed])[0]
-        confidence = min(abs(decision_score) / 3.0, 1.0)
+        # Sigmoid-style calibration instead of raw /3.0 — maps score into
+        # a smooth 0-1 range and avoids over-confident outputs.
+        import math
+        raw_confidence = 1.0 / (1.0 + math.exp(-abs(decision_score) * 0.8))
+        # Rescale from [0.5, 1.0] → [0.0, 1.0]
+        raw_confidence = (raw_confidence - 0.5) * 2.0
     except Exception:
-        confidence = 0.5
+        raw_confidence = 0.5
 
+    # ── Short-text penalty: reduce model confidence for very short inputs ──
+    word_count = len(text.split())
+    if word_count < 80:
+        length_factor = max(0.4, word_count / 80.0)
+        raw_confidence *= length_factor
+
+    # ── NLP indicator analysis ──
+    indicators = preprocessor.analyze_suspicious_indicators(text)
+    sensationalism = indicators.get('sensationalism_score', 0.0)
+    cred_signal = indicators.get('credibility_score', 0.0)
+
+    # NLP nudge: positive = more credible, negative = more suspicious
+    # This captures signals the ML model can miss (sourced attribution,
+    # academic references, official statements, etc.)
+    nlp_nudge = (cred_signal - sensationalism) * 0.5  # range roughly -0.5 to +0.5
+
+    # ── Blend model score with NLP indicators ──
     if prediction == 'REAL':
-        credibility = 0.5 + (confidence * 0.5)
+        model_credibility = 0.5 + (raw_confidence * 0.5)
     else:
-        credibility = 0.5 - (confidence * 0.5)
+        model_credibility = 0.5 - (raw_confidence * 0.5)
+
+    # Weighted blend: 80% model + 20% NLP nudge
+    credibility = max(0.0, min(1.0, model_credibility + nlp_nudge * 0.2))
+
+    # If confidence is very low (model unsure) AND NLP signals lean credible,
+    # soften toward neutral rather than labelling as FAKE
+    if prediction == 'FAKE' and raw_confidence < 0.35 and nlp_nudge > 0:
+        credibility = max(credibility, 0.45)  # push toward "uncertain" zone
+
+    # Possibly flip verdict if NLP strongly disagrees with a weak model call
+    if credibility >= 0.5 and prediction == 'FAKE':
+        prediction = 'REAL'
+        raw_confidence = credibility - 0.5  # re-derive
+    elif credibility < 0.5 and prediction == 'REAL':
+        prediction = 'FAKE'
+        raw_confidence = 0.5 - credibility
+
+    confidence = min(abs(credibility - 0.5) * 2.0, 1.0)
 
     sentences = preprocessor.get_sentences(text)
     sentence_scores = []
@@ -880,13 +924,11 @@ def predict_article(text, model, preprocessor):
         sent_processed = preprocessor.preprocess_for_model(sent)
         try:
             sent_decision = model.decision_function([sent_processed])[0]
-            sent_suspicion = max(0, -sent_decision) / 3.0
+            sent_suspicion = 1.0 / (1.0 + math.exp(sent_decision * 0.8))
             sent_suspicion = min(sent_suspicion, 1.0)
         except Exception:
             sent_suspicion = preprocessor.score_sentence_suspicion(sent)
         sentence_scores.append((sent, sent_suspicion))
-
-    indicators = preprocessor.analyze_suspicious_indicators(text)
 
     return {
         'prediction': prediction,

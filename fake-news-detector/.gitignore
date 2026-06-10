@@ -3,6 +3,9 @@
 venv/
 env/
 
+# Debug files
+otp_debug.txt
+
 # Python
 __pycache__/
 *.py[cod]
