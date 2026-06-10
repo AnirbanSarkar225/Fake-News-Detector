@@ -1,0 +1,26 @@
+{
+  "accuracy": 0.9009844485661292,
+  "precision": 0.8927044952100222,
+  "recall": 0.9017418490397499,
+  "f1_score": 0.8972004147533699,
+  "confusion_matrix": [
+    [
+      6573,
+      728
+    ],
+    [
+      660,
+      6057
+    ]
+  ],
+  "labels": [
+    "FAKE",
+    "REAL"
+  ],
+  "train_size": 56072,
+  "test_size": 14018,
+  "total_articles": 70090,
+  "roc_fpr": [],
+  "roc_tpr": [],
+  "roc_auc": 0.0
+}

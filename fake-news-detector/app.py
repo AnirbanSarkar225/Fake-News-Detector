@@ -1320,34 +1320,6 @@ def render_dashboard():
         """, unsafe_allow_html=True)
 
         st.markdown("---")
-        # Collapsible SMTP settings in dashboard sidebar for Admin use
-        with st.expander("⚙️ Server SMTP Configuration", expanded=False):
-            st.caption("Configure the Gmail sender parameters for OTP codes:")
-            smtp_user_input = st.text_input("SMTP User (Gmail):", value=st.session_state.get("smtp_user", ""), placeholder="your.sender@gmail.com", key="setup_smtp_user")
-            smtp_pass_input = st.text_input("SMTP App Password:", value=st.session_state.get("smtp_password", ""), type="password", placeholder="xxxx xxxx xxxx xxxx", key="setup_smtp_pass")
-            
-            col_smtp1, col_smtp2 = st.columns(2)
-            with col_smtp1:
-                smtp_server_input = st.text_input("SMTP Server:", value=st.session_state.get("smtp_server", "smtp.gmail.com"), key="setup_smtp_server")
-            with col_smtp2:
-                smtp_port_input = st.number_input("SMTP Port:", value=int(st.session_state.get("smtp_port", 587)), step=1, key="setup_smtp_port")
-                
-            if smtp_user_input:
-                st.session_state.smtp_user = smtp_user_input.strip()
-            if smtp_pass_input:
-                st.session_state.smtp_password = smtp_pass_input.strip()
-            if smtp_server_input:
-                st.session_state.smtp_server = smtp_server_input.strip()
-            st.session_state.smtp_port = int(smtp_port_input)
-            
-            # Save config button
-            if st.button("Save Server Config", key="save_smtp_config_btn"):
-                user_val = st.session_state.get("smtp_user")
-                pass_val = st.session_state.get("smtp_password")
-                if user_val and pass_val:
-                    save_smtp_config(user_val, pass_val, st.session_state.smtp_server, st.session_state.smtp_port)
-                    st.success("Config saved persistently!")
-                    st.rerun()
 
     tab_analyze, tab_education, tab_analytics, tab_evaluation, tab_history = st.tabs(["🔍 Credibility Analyzer", "📖 Media Literacy Hub", "📊 Analytics & Insights", "🔬 Model Evaluation & Research", "📋 Analysis History"])
 
