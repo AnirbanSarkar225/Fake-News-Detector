@@ -2339,7 +2339,7 @@ def render_dashboard():
         metrics_source = "📊 Live metrics from training" if eval_metrics else "📋 Default reference values"
         st.caption(metrics_source)
         
-        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+        col_m1, col_m2, col_m3, col_m4 = st.columns(4, gap="medium")
         with col_m1:
             st.metric("Accuracy Score", f"{m_accuracy:.2f}%", help="Overall dataset classification accuracy.")
         with col_m2:
@@ -2351,7 +2351,7 @@ def render_dashboard():
         
         # Show dataset size if available
         if eval_metrics:
-            col_ds1, col_ds2, col_ds3 = st.columns(3)
+            col_ds1, col_ds2, col_ds3 = st.columns(3, gap="medium")
             with col_ds1:
                 st.metric("Total Articles", f"{eval_metrics.get('total_articles', 0):,}")
             with col_ds2:
