@@ -11,7 +11,6 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-
 import joblib
 import streamlit as st
 import plotly.graph_objects as go
@@ -1337,7 +1336,8 @@ def render_dashboard():
                 st.session_state.smtp_user = smtp_user_input.strip()
             if smtp_pass_input:
                 st.session_state.smtp_password = smtp_pass_input.strip()
-            st.session_state.smtp_server = smtp_server_input.strip()
+            if smtp_server_input:
+                st.session_state.smtp_server = smtp_server_input.strip()
             st.session_state.smtp_port = int(smtp_port_input)
             
             # Save config button
@@ -1353,6 +1353,7 @@ def render_dashboard():
 
     with tab_analyze:
         article_text = None
+        url_input = None
 
         if "📝" in input_mode:
             st.markdown("### Paste Your Article")
@@ -2540,7 +2541,8 @@ def main():
         render_dashboard()
 
     # Inject JavaScript scroll-reveal animation using iframe component
-    st.components.v1.html("""
+    st.components.v1.html(  # type: ignore[attr-defined]
+        """
     <script>
         const parentDoc = window.parent.document;
         if (!parentDoc.getElementById('scroll-reveal-style')) {
