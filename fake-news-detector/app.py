@@ -710,6 +710,14 @@ st.markdown("""
         margin-top: 0.3rem;
         line-height: 1.5;
     }
+    
+    /* Hide Streamlit "Press Enter to apply" tooltip */
+    [data-testid="stTextInput"] [data-testid="textInputInstructions"] {
+        display: none !important;
+    }
+    div[data-baseweb="input"] ~ div {
+        display: none !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
