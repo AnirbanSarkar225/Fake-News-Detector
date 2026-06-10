@@ -11,6 +11,7 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 import joblib
 import streamlit as st
 import plotly.graph_objects as go
@@ -32,7 +33,7 @@ except LookupError:
 
 def get_base64_logo():
     """Load local logo and return as base64 data URI."""
-    logo_path = os.path.join(SCRIPT_DIR, "assets", "logo.png")
+    logo_path = os.path.join(PROJECT_ROOT, "assets", "logo.png")
     if os.path.exists(logo_path):
         try:
             with open(logo_path, "rb") as image_file:
@@ -44,7 +45,7 @@ def get_base64_logo():
 
 logo_base64 = get_base64_logo()
 
-sys.path.insert(0, SCRIPT_DIR)
+sys.path.insert(0, PROJECT_ROOT)
 from utils.preprocess import TextPreprocessor
 from utils.scraper import ArticleScraper
 from utils.nlp_engine import NLPEngine
@@ -725,7 +726,7 @@ st.markdown("""
 @st.cache_resource
 def load_model():
     """Load the trained model pipeline."""
-    model_path = os.path.join(SCRIPT_DIR, "model", "fake_news_model.pkl")
+    model_path = os.path.join(PROJECT_ROOT, "model", "fake_news_model.pkl")
     if os.path.exists(model_path):
         return joblib.load(model_path)
     return None
@@ -901,7 +902,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 def get_db_connection():
-    db_path = os.path.join(SCRIPT_DIR, "data", "truthshield.db")
+    db_path = os.path.join(PROJECT_ROOT, "data", "truthshield.db")
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -1025,7 +1026,7 @@ def get_misclassified_articles():
 
 def load_smtp_config():
     """Load SMTP configurations from local storage."""
-    config_path = os.path.join(SCRIPT_DIR, "assets", "smtp_config.json")
+    config_path = os.path.join(PROJECT_ROOT, "assets", "smtp_config.json")
     if os.path.exists(config_path):
         try:
             with open(config_path, "r", encoding="utf-8") as f:
@@ -1036,7 +1037,7 @@ def load_smtp_config():
 
 def save_smtp_config(smtp_user, smtp_password, smtp_server="smtp.gmail.com", smtp_port=587):
     """Save SMTP configurations to local storage."""
-    config_path = os.path.join(SCRIPT_DIR, "assets", "smtp_config.json")
+    config_path = os.path.join(PROJECT_ROOT, "assets", "smtp_config.json")
     try:
         os.makedirs(os.path.dirname(config_path), exist_ok=True)
         config = {
@@ -1101,7 +1102,7 @@ def start_updater_daemon():
     """Start the background update daemon exactly once, completely hiding the console window on Windows."""
     try:
         import subprocess
-        updater_path = os.path.join(SCRIPT_DIR, "realtime_update.py")
+        updater_path = os.path.join(PROJECT_ROOT, "scripts", "realtime_update.py")
         if os.path.exists(updater_path):
             if os.name == 'nt':
                 CREATE_NO_WINDOW = 0x08000000
@@ -1237,12 +1238,12 @@ def render_login():
                             
                         st.session_state.otp_sent = True
                         print(f"[AUTH] Email: {email_input.strip()} | OTP: {otp} | Sent: {success}", flush=True)
-                        with open(os.path.join(SCRIPT_DIR, "otp_debug.txt"), "w", encoding="utf-8") as f:
+                        with open(os.path.join(PROJECT_ROOT, "otp_debug.txt"), "w", encoding="utf-8") as f:
                             f.write(otp)
                         if success:
                             st.session_state.login_message = ("success", f"📨 Verification code sent to **{email_input}**!")
                         else:
-                            st.session_state.login_message = ("info", f"💡 **Developer Mock Mode Active**<br>We generated OTP: <span style='font-size:1.4rem; color:var(--accent); font-weight:bold;'>{otp}</span><br><span style='font-size:0.8rem; color:var(--text-muted);'>Reason: SMTP credentials not set in env variables. Copy the OTP code above to sign in.</span>")
+                            st.session_state.login_message = ("html", f"<div style='background:rgba(212,155,76,0.08); border:1px solid rgba(212,155,76,0.25); border-radius:12px; padding:1rem 1.2rem;'>💡 <b>Developer Mock Mode Active</b><br>We generated OTP: <span style='font-size:1.4rem; color:var(--accent); font-weight:bold;'>{otp}</span><br><span style='font-size:0.8rem; color:var(--text-muted);'>Reason: SMTP credentials not set in env variables. Copy the OTP code above to sign in.</span></div>")
                         st.rerun()
                     else:
                         st.error("⚠️ Please enter a valid email address.")
@@ -1253,6 +1254,8 @@ def render_login():
                         st.success(msg_text)
                     elif msg_type == "info":
                         st.info(msg_text)
+                    elif msg_type == "html":
+                        st.markdown(msg_text, unsafe_allow_html=True)
                 else:
                     st.info(f"📨 Verification code sent to **{st.session_state.email}**")
                 otp_input = st.text_input("Enter 6-Digit Code:", placeholder="123456", key="otp_input", on_change=lambda: None)
@@ -2430,7 +2433,7 @@ def render_dashboard():
         st.markdown("---")
         
         # ── Load real metrics from JSON if available (Component 5) ──
-        metrics_path = os.path.join(SCRIPT_DIR, "model", "evaluation_metrics.json")
+        metrics_path = os.path.join(PROJECT_ROOT, "model", "evaluation_metrics.json")
         eval_metrics = None
         try:
             if os.path.exists(metrics_path):
