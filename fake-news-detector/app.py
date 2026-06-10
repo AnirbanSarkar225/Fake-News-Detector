@@ -1161,7 +1161,7 @@ def render_login():
             </div>
             """, unsafe_allow_html=True)
             last_email = get_last_user()
-            email_input = st.text_input("Enter your Gmail Address:", value=last_email, placeholder="name@gmail.com", key="login_email")
+            email_input = st.text_input("Enter your Gmail Address:", value=last_email, placeholder="name@gmail.com", key="login_email", on_change=lambda: None)
             
             if not st.session_state.otp_sent:
                 if st.button("Send Verification Code", use_container_width=True, type="primary", key="send_otp_btn"):
@@ -1193,7 +1193,7 @@ def render_login():
                         st.info(msg_text)
                 else:
                     st.info(f"📨 Verification code sent to **{st.session_state.email}**")
-                otp_input = st.text_input("Enter 6-Digit Code:", placeholder="123456", key="otp_input")
+                otp_input = st.text_input("Enter 6-Digit Code:", placeholder="123456", key="otp_input", on_change=lambda: None)
                 
                 col_btn_verify, col_btn_resend = st.columns(2)
                 with col_btn_verify:
