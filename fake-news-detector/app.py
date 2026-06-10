@@ -929,6 +929,19 @@ def init_db():
             FOREIGN KEY(user_email) REFERENCES users(email)
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_email TEXT,
+            text TEXT,
+            model_prediction TEXT,
+            user_verdict TEXT,
+            rating INTEGER,
+            notes TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_email) REFERENCES users(email)
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -965,6 +978,47 @@ def get_user_history(email):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM history WHERE user_email = ? ORDER BY timestamp DESC", (email,))
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+def save_feedback(email, text, model_prediction, user_verdict, rating, notes):
+    """Save user feedback to improve model calibration."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO feedback (user_email, text, model_prediction, user_verdict, rating, notes)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (email, text[:500], model_prediction, user_verdict, rating, notes[:1000]))
+    conn.commit()
+    feedback_id = cursor.lastrowid
+    conn.close()
+    return feedback_id
+
+def get_feedback_stats():
+    """Get feedback statistics to identify systematic errors."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT model_prediction, user_verdict, COUNT(*) as count, AVG(rating) as avg_rating
+        FROM feedback
+        WHERE user_verdict != 'Neutral'
+        GROUP BY model_prediction, user_verdict
+    """)
+    stats = cursor.fetchall()
+    conn.close()
+    return stats
+
+def get_misclassified_articles():
+    """Get articles where model was wrong according to user feedback."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT text, model_prediction, user_verdict, rating, notes, timestamp
+        FROM feedback
+        WHERE user_verdict = 'Disagree with AI' AND rating <= 2
+        ORDER BY timestamp DESC LIMIT 50
+    """)
     rows = cursor.fetchall()
     conn.close()
     return rows
@@ -1895,7 +1949,27 @@ def render_dashboard():
                     feedback_notes = st.text_input("Optional notes:", placeholder="What did the model get right or wrong?", key="feedback_notes")
                     
                     if st.button("Submit Feedback", key="submit_feedback_btn"):
-                        st.success("🙏 Thank you! Your feedback has been logged to calibrate future models.")
+                        email = st.session_state.get("email", "anonymous")
+                        feedback_id = save_feedback(
+                            email, 
+                            analysis_text, 
+                            results['prediction'],
+                            user_agreement,
+                            rating,
+                            feedback_notes
+                        )
+                        
+                        if user_agreement == "Disagree with AI":
+                            st.warning(f"⚠️ We noted your disagreement. If the model called this {results['prediction']}, we'll analyze this pattern to improve. Your feedback helps calibrate our accuracy!")
+                        elif user_agreement == "Agree with AI":
+                            st.success("✅ Thank you! Your confirmation helps validate our model.")
+                        else:
+                            st.info("💭 Thank you for your neutral feedback.")
+                        
+                        if rating <= 2:
+                            st.error(f"⚠️ **We detected an accuracy issue**. Your low rating has been flagged for model recalibration. We're improving our detection patterns based on your feedback.")
+                        elif rating >= 4:
+                            st.success("🎯 Great! Your positive rating indicates strong model performance on this case.")
                         
             with col_feed2:
                 with st.container(border=True):
@@ -2314,6 +2388,41 @@ def render_dashboard():
                         margin=dict(l=30, r=10, t=10, b=30)
                     )
                     st.plotly_chart(fig_geo, use_container_width=True)
+        
+        # Feedback Analytics Section
+        st.markdown("---")
+        st.markdown("### 💬 User Feedback Analytics")
+        st.caption("Analysis of user corrections and model improvements based on feedback")
+        
+        try:
+            feedback_stats = get_feedback_stats()
+            misclassified = get_misclassified_articles()
+            
+            col_fb1, col_fb2, col_fb3 = st.columns(3)
+            with col_fb1:
+                with st.container(border=True):
+                    st.metric("Total Feedback Items", len(misclassified) if misclassified else "No feedback yet")
+            with col_fb2:
+                with st.container(border=True):
+                    disagreements = sum(1 for item in misclassified if item['user_verdict'] == 'Disagree with AI')
+                    st.metric("Disagreements Logged", disagreements)
+            with col_fb3:
+                with st.container(border=True):
+                    low_ratings = sum(1 for item in misclassified if item['rating'] <= 2)
+                    st.metric("Low Accuracy Ratings", low_ratings)
+            
+            if misclassified:
+                st.info("🔍 **Model Corrections Based on Your Feedback:** These articles were flagged as misclassified by users. The model is learning from this data.")
+                with st.expander("📋 View misclassified articles"):
+                    for article in misclassified[:10]:
+                        col_art1, col_art2 = st.columns([3, 1])
+                        with col_art1:
+                            st.markdown(f"**Model said:** `{article['model_prediction']}` → **You said:** `{article['user_verdict']}`")
+                            st.caption(f"Rating: {'⭐' * article['rating']} | Notes: {article['notes'][:100] if article['notes'] else 'N/A'}")
+                        with col_art2:
+                            st.caption(f"📅 {article['timestamp']}")
+        except Exception as e:
+            st.caption(f"⚠️ Could not load feedback analytics: {str(e)}")
 
     with tab_evaluation:
         st.markdown("## 🔬 Model Evaluation & Research Dashboard")

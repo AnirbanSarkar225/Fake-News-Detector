@@ -17,3 +17,5 @@ langdetect>=1.0.9
 deep-translator>=1.11
 shap>=0.44
 spacy>=3.7
+fastapi>=0.104
+uvicorn>=0.24

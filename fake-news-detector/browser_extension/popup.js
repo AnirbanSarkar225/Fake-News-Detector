@@ -27,9 +27,8 @@ document.addEventListener('DOMContentLoaded', () => {
     verifyBtn.disabled = true;
 
     try {
-      // Send API request to the local Streamlit backend
-      // (Assuming Streamlit has exposed a /predict endpoint, or using mock response fallback)
-      const response = await fetch('http://localhost:8501/api/predict', {
+      // Send API request to the local API server
+      const response = await fetch('http://localhost:8000/predict-json', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -39,13 +38,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (response.ok) {
         const data = await response.json();
-        renderResult(data.prediction, data.confidence, data.summary);
+        if (data.error) {
+          runMockAnalysis(text);
+        } else {
+          renderResult(data.prediction, data.confidence, data.summary);
+        }
       } else {
         // Fallback demo results if server API endpoint is not running
         runMockAnalysis(text);
       }
     } catch (err) {
       // Fallback demo results if connection fails
+      console.log('API connection failed, using mock analysis. Make sure the API server is running on port 8000');
       runMockAnalysis(text);
     }
   });
