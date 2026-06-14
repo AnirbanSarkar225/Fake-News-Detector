@@ -853,8 +853,146 @@ def explain_pattern(pat):
         "survey": "Data Reference"
     }
     
-    category = explanations.get(pat_lower, "Stylistic Pattern")
-    return f"{category} (\"{pat_str}\")"
+    if pat_lower in explanations:
+        category = explanations[pat_lower]
+        return f"{category} (\"{pat_str}\")"
+        
+    # Check regexes for dynamic credibility categories
+    import re
+    
+    # Quantitative & factual (percent, billion, numbers, etc.)
+    if re.search(r'\b(?:percent|percentage|\d+%)\b', pat_lower) or pat_lower.endswith('%'):
+        return f"Factual Statistics (\"{pat_str}\")"
+    if re.search(r'\b(?:billion|million|thousand|quarter|fiscal)\b', pat_lower):
+        return f"Quantitative Metric (\"{pat_str}\")"
+    if re.search(r'\b(?:increase|decrease|growth|decline|rose|fell)\b', pat_lower):
+        return f"Statistical Trend (\"{pat_str}\")"
+
+    # Attribution & sourcing
+    if re.search(r'\b(?:reported by|as reported|sources say|sources said)\b', pat_lower):
+        return f"Sourced Attribution (\"{pat_str}\")"
+    if re.search(r'\b(?:stated that|said that|noted that|added that|explained that)\b', pat_lower):
+        return f"Attributed Statement (\"{pat_str}\")"
+    if re.search(r'\b(?:told reporters|in a statement|press conference|press release)\b', pat_lower):
+        return f"Official Statement (\"{pat_str}\")"
+
+    # Institutional & Academic
+    if re.search(r'\b(?:laboratory|institute|university|journal|peer-reviewed)\b', pat_lower):
+        return f"Academic Reference (\"{pat_str}\")"
+    if re.search(r'\b(?:acknowledged|confirmed|official|spokesperson|statement)\b', pat_lower):
+        return f"Official Confirmation (\"{pat_str}\")"
+    if re.search(r'\b(?:findings|concluded|evidence|analysis|statistics|survey)\b', pat_lower):
+        return f"Research Conclusion (\"{pat_str}\")"
+
+    # Government & policy
+    if re.search(r'\b(?:ministry|department|government|federal|parliament|legislature)\b', pat_lower):
+        return f"Government Institution (\"{pat_str}\")"
+    if re.search(r'\b(?:announced|initiative|program|programme|policy|regulation)\b', pat_lower):
+        return f"Public Policy (\"{pat_str}\")"
+    if re.search(r'\b(?:scheme|subsidy|budget|allocation|funding|grant)\b', pat_lower):
+        return f"Financial Allocation (\"{pat_str}\")"
+    if re.search(r'\b(?:legislation|amendment|bill|act|ordinance|directive)\b', pat_lower):
+        return f"Legislative Reference (\"{pat_str}\")"
+    if re.search(r'\b(?:commission|committee|council|authority|agency|bureau)\b', pat_lower):
+        return f"Administrative Authority (\"{pat_str}\")"
+    if re.search(r'\b(?:election|ballot|vote|referendum|constituency|polling)\b', pat_lower):
+        return f"Electoral Data (\"{pat_str}\")"
+
+    # Formal reporting verbs
+    if re.search(r'\b(?:disclosed|released|published|issued|announced|reported)\b', pat_lower):
+        return f"Formal Disclosure (\"{pat_str}\")"
+    if re.search(r'\b(?:implemented|proposed|approved|authorized|ratified)\b', pat_lower):
+        return f"Executive Decision (\"{pat_str}\")"
+    if re.search(r'\b(?:expected to|is expected|are expected|was expected)\b', pat_lower):
+        return f"Projected Expectation (\"{pat_str}\")"
+
+    # Geographic & organizational
+    if re.search(r'\b(?:city|state|district|region|country|nation|province)\b', pat_lower):
+        return f"Geographic Context (\"{pat_str}\")"
+    if re.search(r'\b(?:organization|organisation|corporation|company|firm)\b', pat_lower):
+        return f"Corporate/Org Context (\"{pat_str}\")"
+
+    # Science & health
+    if re.search(r'\b(?:clinical|trial|vaccine|treatment|therapy|diagnosis)\b', pat_lower):
+        return f"Clinical/Medical Trial (\"{pat_str}\")"
+    if re.search(r'\b(?:patients|symptoms|disease|infection|outbreak|pandemic)\b', pat_lower):
+        return f"Public Health Data (\"{pat_str}\")"
+    if re.search(r'\b(?:researcher|scientist|physician|doctor|surgeon|nurse)\b', pat_lower):
+        return f"Scientific Authority (\"{pat_str}\")"
+    if re.search(r'\b(?:hospital|clinic|medical|pharmaceutical|fda|who)\b', pat_lower):
+        return f"Medical Authority (\"{pat_str}\")"
+    if re.search(r'\b(?:study|experiment|published in|lancet|nature|jama)\b', pat_lower):
+        return f"Scientific Publication (\"{pat_str}\")"
+
+    # Business & finance
+    if re.search(r'\b(?:revenue|profit|earnings|shares|stock|market)\b', pat_lower):
+        return f"Financial/Market Data (\"{pat_str}\")"
+    if re.search(r'\b(?:ceo|cfo|chairman|director|executive|management)\b', pat_lower):
+        return f"Corporate Authority (\"{pat_str}\")"
+    if re.search(r'\b(?:quarterly|annual|fiscal year|dividend|valuation)\b', pat_lower):
+        return f"Financial Reporting (\"{pat_str}\")"
+    if re.search(r'\b(?:acquisition|merger|ipo|investment|venture|startup)\b', pat_lower):
+        return f"Business Venture (\"{pat_str}\")"
+    if re.search(r'\b(?:inflation|gdp|economy|recession|interest rate|central bank)\b', pat_lower):
+        return f"Economic Indicator (\"{pat_str}\")"
+
+    # Technology
+    if re.search(r'\b(?:launched|unveiled|released|update|version|upgrade)\b', pat_lower):
+        return f"Product Release (\"{pat_str}\")"
+    if re.search(r'\b(?:software|hardware|platform|application|device|processor)\b', pat_lower):
+        return f"Technology Platform (\"{pat_str}\")"
+    if re.search(r'\b(?:artificial intelligence|machine learning|cybersecurity|cloud)\b', pat_lower):
+        return f"Tech Domain Context (\"{pat_str}\")"
+    if re.search(r'\b(?:patent|innovation|prototype|beta|rollout)\b', pat_lower):
+        return f"Technical Innovation (\"{pat_str}\")"
+
+    # Sports
+    if re.search(r'\b(?:scored|defeated|championship|tournament|league|season)\b', pat_lower):
+        return f"Sports Competition (\"{pat_str}\")"
+    if re.search(r'\b(?:coach|manager|captain|player|athlete|team)\b', pat_lower):
+        return f"Sports Figure (\"{pat_str}\")"
+    if re.search(r'\b(?:match|game|final|semifinal|qualifier|fixture)\b', pat_lower):
+        return f"Sports Match (\"{pat_str}\")"
+    if re.search(r'\b(?:medal|record|olympic|world cup|fifa|uefa|icc)\b', pat_lower):
+        return f"Sports Event/Milestone (\"{pat_str}\")"
+    if re.search(r'\b(?:innings|wicket|goal|touchdown|set|round)\b', pat_lower):
+        return f"Sports Stat (\"{pat_str}\")"
+
+    # Crime & legal
+    if re.search(r'\b(?:court|judge|verdict|trial|prosecution|defendant)\b', pat_lower):
+        return f"Judicial Proceeding (\"{pat_str}\")"
+    if re.search(r'\b(?:arrested|charged|convicted|sentenced|investigation)\b', pat_lower):
+        return f"Legal Enforcement (\"{pat_str}\")"
+    if re.search(r'\b(?:police|detective|officer|sheriff|fbi|enforcement)\b', pat_lower):
+        return f"Law Enforcement (\"{pat_str}\")"
+    if re.search(r'\b(?:suspect|witness|testimony|evidence|forensic)\b', pat_lower):
+        return f"Investigative Testimony (\"{pat_str}\")"
+    if re.search(r'\b(?:lawsuit|hearing|ruling|appeal|bail|parole)\b', pat_lower):
+        return f"Legal Proceeding (\"{pat_str}\")"
+
+    # International & diplomatic
+    if re.search(r'\b(?:treaty|summit|bilateral|diplomatic|embassy|consul)\b', pat_lower):
+        return f"Diplomatic Event (\"{pat_str}\")"
+    if re.search(r'\b(?:united nations|nato|eu|asean|g7|g20)\b', pat_lower):
+        return f"International Body (\"{pat_str}\")"
+    if re.search(r'\b(?:sanctions|tariff|trade agreement|ceasefire|peacekeeping)\b', pat_lower):
+        return f"International Policy (\"{pat_str}\")"
+    if re.search(r'\b(?:ambassador|diplomat|foreign minister|secretary of state)\b', pat_lower):
+        return f"Diplomatic Representative (\"{pat_str}\")"
+
+    # Weather & environment
+    if re.search(r'\b(?:forecast|temperature|rainfall|hurricane|cyclone|tornado)\b', pat_lower):
+        return f"Weather Report (\"{pat_str}\")"
+    if re.search(r'\b(?:flood|drought|wildfire|earthquake|tsunami|eruption)\b', pat_lower):
+        return f"Natural Disaster (\"{pat_str}\")"
+    if re.search(r'\b(?:evacuation|advisory|warning|alert issued|emergency)\b', pat_lower):
+        return f"Public Safety Alert (\"{pat_str}\")"
+    if re.search(r'\b(?:climate|carbon|emissions|renewable|sustainability)\b', pat_lower):
+        return f"Environmental Context (\"{pat_str}\")"
+    if re.search(r'\b(?:meteorological|seismological|conservation|endangered)\b', pat_lower):
+        return f"Conservation/Earth Sci (\"{pat_str}\")"
+
+    return f"Stylistic Pattern (\"{pat_str}\")"
 
 
 def predict_article(text, model, preprocessor):
@@ -878,10 +1016,10 @@ def predict_article(text, model, preprocessor):
     except Exception:
         raw_confidence = 0.5
 
-    # ── Short-text penalty: reduce model confidence for very short inputs ──
+    # ── Short-text penalty: reduce model confidence for short inputs ──
     word_count = len(text.split())
-    if word_count < 80:
-        length_factor = max(0.4, word_count / 80.0)
+    if word_count < 150:
+        length_factor = max(0.3, word_count / 150.0)
         raw_confidence *= length_factor
 
     # ── NLP indicator analysis ──
@@ -891,7 +1029,7 @@ def predict_article(text, model, preprocessor):
 
     # NLP nudge: positive = more credible, negative = more suspicious
     # This captures signals the ML model can miss (sourced attribution,
-    # academic references, official statements, etc.)
+    # government/policy language, formal reporting style, etc.)
     nlp_nudge = (cred_signal - sensationalism) * 0.5  # range roughly -0.5 to +0.5
 
     # ── Blend model score with NLP indicators ──
@@ -900,12 +1038,12 @@ def predict_article(text, model, preprocessor):
     else:
         model_credibility = 0.5 - (raw_confidence * 0.5)
 
-    # Weighted blend: 80% model + 20% NLP nudge
-    credibility = max(0.0, min(1.0, model_credibility + nlp_nudge * 0.2))
+    # Weighted blend: 60% model + 40% NLP signals
+    credibility = max(0.0, min(1.0, model_credibility + nlp_nudge * 0.4))
 
-    # If confidence is very low (model unsure) AND NLP signals lean credible,
+    # If confidence is low-to-moderate AND NLP signals lean credible,
     # soften toward neutral rather than labelling as FAKE
-    if prediction == 'FAKE' and raw_confidence < 0.35 and nlp_nudge > 0:
+    if prediction == 'FAKE' and raw_confidence < 0.5 and nlp_nudge > 0:
         credibility = max(credibility, 0.45)  # push toward "uncertain" zone
 
     # Possibly flip verdict if NLP strongly disagrees with a weak model call
@@ -1280,8 +1418,12 @@ def render_login():
                             
                         st.session_state.otp_sent = True
                         print(f"[AUTH] Email: {email_input.strip()} | OTP: {otp} | Sent: {success}", flush=True)
-                        with open(os.path.join(PROJECT_ROOT, "otp_debug.txt"), "w", encoding="utf-8") as f:
-                            f.write(otp)
+                        import tempfile
+                        try:
+                            with open(os.path.join(tempfile.gettempdir(), "otp_debug.txt"), "w", encoding="utf-8") as f:
+                                f.write(otp)
+                        except Exception:
+                            pass
                         if success:
                             st.session_state.login_message = ("success", f"📨 Verification code sent to **{email_input}**!")
                         else:

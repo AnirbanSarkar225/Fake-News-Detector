@@ -48,11 +48,26 @@ def check_model():
     return True
 
 
+def get_python_executable():
+    """Resolve the python executable to use. Prefer the virtual environment's python."""
+    # Check for Windows virtualenv python
+    venv_py_win = os.path.join(PROJECT_ROOT, ".venv", "Scripts", "python.exe")
+    if os.path.exists(venv_py_win):
+        return venv_py_win
+    # Check for Unix virtualenv python
+    venv_py_unix = os.path.join(PROJECT_ROOT, ".venv", "bin", "python")
+    if os.path.exists(venv_py_unix):
+        return venv_py_unix
+    # Fallback to sys.executable
+    return sys.executable
+
+
 def start_api():
     """Start the FastAPI server."""
     log("API", CYAN, "Starting FastAPI server on http://localhost:8000 ...")
+    py_exec = get_python_executable()
     return subprocess.Popen(
-        [sys.executable, os.path.join("src", "api_server.py")],
+        [py_exec, os.path.join("src", "api_server.py")],
         cwd=PROJECT_ROOT,
     )
 
@@ -60,8 +75,9 @@ def start_api():
 def start_streamlit():
     """Start the Streamlit dashboard."""
     log("APP", CYAN, "Starting Streamlit dashboard on http://localhost:8501 ...")
+    py_exec = get_python_executable()
     return subprocess.Popen(
-        [sys.executable, "-m", "streamlit", "run",
+        [py_exec, "-m", "streamlit", "run",
          os.path.join("src", "app.py"),
          "--server.headless", "true"],
         cwd=PROJECT_ROOT,
