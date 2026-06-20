@@ -6,26 +6,25 @@ from sklearn.metrics import (
     confusion_matrix
 )
 
-# Load components
+# Load model
 preprocessor = joblib.load("model/preprocessor.pkl")
 model = joblib.load("model/fake_news_model.pkl")
 
-# Load evaluation dataset
-df = pd.read_csv("data/fake_news_evaluation_set.csv")
+# Load dataset
+df = pd.read_csv("data/news.csv")
 
-print(f"Loaded {len(df)} samples")
+# Random sample of 5000 articles
+df = df.sample(n=5000, random_state=42)
 
-# Adjust column names if needed
 X = df["text"]
 y_true = df["label"]
 
-# Preprocess text
-X_processed = [preprocessor.preprocess_text(text) for text in X]
+# Preprocess
+X_processed = [preprocessor.preprocess_for_model(text) for text in X]
 
 # Predict
 y_pred = model.predict(X_processed)
 
-# Metrics
 print("\nAccuracy:")
 print(accuracy_score(y_true, y_pred))
 
