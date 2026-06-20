@@ -36,11 +36,17 @@ SLATE_BORDER    = (55 / 255, 65 / 255, 81 / 255)          # #374151
 
 # Category colors (R, G, B floats)
 CATEGORY_COLORS = {
-    "REAL":       (16 / 255, 185 / 255, 129 / 255),   # green  #10b981
-    "FAKE":       (239 / 255, 68 / 255, 68 / 255),    # red    #ef4444
-    "MISLEADING": (249 / 255, 115 / 255, 22 / 255),   # orange #f97316
-    "CLICKBAIT":  (245 / 255, 158 / 255, 11 / 255),   # yellow #f59e0b
-    "SATIRE":     (59 / 255, 130 / 255, 246 / 255),   # blue   #3b82f6
+    "REAL":                     (16 / 255, 185 / 255, 129 / 255),   # green  #10b981
+    "HIGHLY CREDIBLE":          (16 / 255, 185 / 255, 129 / 255),   # green
+    "LIKELY REAL":              (126 / 255, 163 / 255, 136 / 255),  # light green
+    "UNCERTAIN":                (212 / 255, 155 / 255, 76 / 255),   # gold/brass
+    "LIKELY FAKE":              (234 / 255, 88 / 255, 12 / 255),    # orange
+    "HIGH RISK MISINFORMATION": (212 / 255, 93 / 255, 78 / 255),    # red
+    "HIGH RISK":                (212 / 255, 93 / 255, 78 / 255),    # red
+    "FAKE":                     (239 / 255, 68 / 255, 68 / 255),    # red    #ef4444
+    "MISLEADING":               (249 / 255, 115 / 255, 22 / 255),   # orange #f97316
+    "CLICKBAIT":                (245 / 255, 158 / 255, 11 / 255),   # yellow #f59e0b
+    "SATIRE":                   (59 / 255, 130 / 255, 246 / 255),   # blue   #3b82f6
 }
 
 # ── Helpers ────────────────────────────────────────────────────────
@@ -89,6 +95,7 @@ def generate_credibility_pdf(
     verification_results=None,
     source_trust=None,
     explanation=None,
+    reliability=None,
 ):
     """
     Generate a TruthShield Verification Report as a PDF.
@@ -143,9 +150,20 @@ def generate_credibility_pdf(
     # Normalise inputs
     confidence_pct = round((confidence or 0) * 100)
     credibility_pct = round((credibility or 0) * 100)
+    reliability_pct = round((reliability or 0) * 100) if reliability is not None else confidence_pct
     effective_category = category or prediction or "UNKNOWN"
     cat_color = _get_category_color(effective_category)
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Compatibility mapping for domain profile keys
+    if domain_profile and isinstance(domain_profile, dict):
+        domain_profile = {k.lower(): v for k, v in domain_profile.items()}
+        if 'score' in domain_profile and 'trust_score' not in domain_profile:
+            domain_profile['trust_score'] = domain_profile['score']
+        if 'bias' in domain_profile and 'political_bias' not in domain_profile:
+            domain_profile['political_bias'] = domain_profile['bias']
+        if 'description' in domain_profile and 'fact_check_record' not in domain_profile:
+            domain_profile['fact_check_record'] = domain_profile['description']
 
     # ── Styles ──────────────────────────────────────────────────
     styles = getSampleStyleSheet()
@@ -232,8 +250,9 @@ def generate_credibility_pdf(
     # ── 2. Verdict table ────────────────────────────────────────
     verdict_data = [
         ["VERDICT", effective_category.upper()],
-        ["Credibility", f"{credibility_pct}%"],
-        ["Confidence", f"{confidence_pct}%"],
+        ["Credibility Score", f"{credibility_pct}%"],
+        ["Reliability Score", f"{reliability_pct}%"],
+        ["Model Confidence", f"{confidence_pct}%"],
     ]
     verdict_table = Table(verdict_data, colWidths=[2.2 * inch, 3.8 * inch])
     verdict_table.setStyle(TableStyle([
@@ -248,18 +267,18 @@ def generate_credibility_pdf(
         ("FONTNAME", (1, 0), (1, 0), "Helvetica-Bold"),
         ("FONTSIZE", (1, 0), (1, 0), 14),
         ("GRID", (0, 0), (-1, -1), 0.5, _rl_color(SLATE_BORDER)),
-        ("TOPPADDING", (0, 0), (-1, -1), 8),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
     story.append(verdict_table)
     story.append(Spacer(1, 8))
 
     # ── 3. Score bars ───────────────────────────────────────────
     story.append(Paragraph(
-        f"Credibility:  {_score_bar_text(credibility_pct)}", style_body,
+        f"Credibility Score (Likely Truth):  {_score_bar_text(credibility_pct)}", style_body,
     ))
     story.append(Paragraph(
-        f"Confidence:   {_score_bar_text(confidence_pct)}", style_body,
+        f"Reliability Score (Evidence Density):   {_score_bar_text(reliability_pct)}", style_body,
     ))
 
     # ── 4. Category classification ──────────────────────────────

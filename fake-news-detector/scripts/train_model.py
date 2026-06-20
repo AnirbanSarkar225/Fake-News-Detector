@@ -98,6 +98,40 @@ def train_model():
     df['label'] = df['label'].map(label_map)
     df = df.dropna(subset=['label'])
 
+    # Continuous Learning: Load feedback from SQLite database if available
+    db_path = os.path.join(PROJECT_ROOT, "data", "truthshield.db")
+    if os.path.exists(db_path):
+        try:
+            import sqlite3
+            conn = sqlite3.connect(db_path)
+            feedback_df = pd.read_sql_query(
+                "SELECT text, model_prediction, user_verdict FROM feedback WHERE user_verdict IN ('Agree with AI', 'Disagree with AI')",
+                conn
+            )
+            conn.close()
+            if not feedback_df.empty:
+                print(f"   Found {len(feedback_df)} user feedback entries in database for retraining.")
+                feedback_data = []
+                for _, row in feedback_df.iterrows():
+                    text = row['text']
+                    pred = str(row['model_prediction']).strip().upper()
+                    verdict = str(row['user_verdict']).strip()
+                    
+                    if verdict == 'Agree with AI':
+                        label = pred
+                    elif verdict == 'Disagree with AI':
+                        label = 'REAL' if pred == 'FAKE' else 'FAKE'
+                    else:
+                        continue
+                    feedback_data.append({'text': text, 'label': label})
+                
+                if feedback_data:
+                    feedback_cleaned = pd.DataFrame(feedback_data)
+                    print(f"   ✓ Integrating {len(feedback_cleaned)} corrected training examples from user feedback loop.")
+                    df = pd.concat([df, feedback_cleaned], ignore_index=True)
+        except Exception as e:
+            print(f"   ⚠️ Could not load feedback database for continuous learning: {e}")
+
     label_counts = df['label'].value_counts()
     print(f"   Label distribution: {label_counts.to_dict()}")
 
@@ -143,14 +177,17 @@ def train_model():
 
     # Since VotingClassifier doesn't support pre-fitted estimators easily,
     # we create a fresh ensemble and train it
+    from sklearn.ensemble import ExtraTreesClassifier
+    
     ensemble = VotingClassifier(
         estimators=[
             ('svc', CalibratedClassifierCV(LinearSVC(C=1.0, max_iter=5000, random_state=42), cv=3, method='sigmoid')),
             ('lr', LogisticRegression(C=1.0, max_iter=1000, random_state=42, solver='lbfgs')),
             ('pa', CalibratedClassifierCV(PassiveAggressiveClassifier(C=0.5, max_iter=100, random_state=42), cv=3, method='sigmoid')),
+            ('et', CalibratedClassifierCV(ExtraTreesClassifier(n_estimators=100, max_depth=15, random_state=42, n_jobs=-1), cv=3, method='sigmoid')),
         ],
         voting='soft',
-        weights=[2, 1, 1],  # Weight SVC higher — best generalization
+        weights=[2, 1, 1, 1],  # Weight SVC higher — best generalization
     )
     ensemble.fit(X_train_tfidf, y_train)
 
@@ -178,15 +215,24 @@ def train_model():
     print()
 
     # Calculate individual classifier accuracies from already fitted ensemble estimators
-    svc_acc = accuracy_score(y_test, ensemble.estimators_[0].predict(X_test_tfidf))
-    lr_acc = accuracy_score(y_test, ensemble.estimators_[1].predict(X_test_tfidf))
-    pa_acc = accuracy_score(y_test, ensemble.estimators_[2].predict(X_test_tfidf))
+    classes = ensemble.classes_
+    def get_est_pred(est):
+        pred = est.predict(X_test_tfidf)
+        if len(pred) > 0 and not isinstance(pred[0], str):
+            pred = np.array([classes[int(round(x))] for x in pred])
+        return pred
+
+    svc_acc = accuracy_score(y_test, get_est_pred(ensemble.estimators_[0]))
+    lr_acc = accuracy_score(y_test, get_est_pred(ensemble.estimators_[1]))
+    pa_acc = accuracy_score(y_test, get_est_pred(ensemble.estimators_[2]))
+    et_acc = accuracy_score(y_test, get_est_pred(ensemble.estimators_[3]))
 
     # Comparison table
     print("   Individual Classifier Accuracy:")
     print(f"   {'LinearSVC':>22}: {svc_acc*100:.2f}%")
     print(f"   {'LogisticRegression':>22}: {lr_acc*100:.2f}%")
     print(f"   {'PassiveAggressive':>22}: {pa_acc*100:.2f}%")
+    print(f"   {'ExtraTrees':>22}: {et_acc*100:.2f}%")
     print(f"   {'Ensemble (weighted)':>22}: {accuracy*100:.2f}%")
     print()
 
@@ -250,13 +296,14 @@ def train_model():
         "roc_fpr": fpr_list,
         "roc_tpr": tpr_list,
         "roc_auc": auc_score,
-        "model_type": "Ensemble (LinearSVC + LogisticRegression + PassiveAggressive)",
+        "model_type": "Ensemble (LinearSVC + LogisticRegression + PassiveAggressive + ExtraTrees)",
         "tfidf_features": int(len(tfidf.vocabulary_)),
         "ngram_range": [1, 3],
         "individual_accuracy": {
             "LinearSVC": float(svc_acc),
             "LogisticRegression": float(lr_acc),
             "PassiveAggressive": float(pa_acc),
+            "ExtraTrees": float(et_acc),
         },
     }
 

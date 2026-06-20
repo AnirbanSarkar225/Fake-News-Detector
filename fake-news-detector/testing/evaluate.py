@@ -1,3 +1,5 @@
+from pathlib import Path
+import sys
 import pandas as pd
 import joblib
 from sklearn.metrics import (
@@ -6,16 +8,21 @@ from sklearn.metrics import (
     confusion_matrix
 )
 
+# Project root
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.append(str(ROOT))
+
 # Load components
-preprocessor = joblib.load("model/preprocessor.pkl")
-model = joblib.load("model/fake_news_model.pkl")
+preprocessor = joblib.load(ROOT / "model" / "preprocessor.pkl")
+model = joblib.load(ROOT / "model" / "fake_news_model.pkl")
 
 # Load evaluation dataset
-df = pd.read_csv("data/fake_news_evaluation_set.csv")
+df = pd.read_csv(
+    ROOT / "data" / "test data" / "fake_news_evaluation_set.csv"
+)
 
 print(f"Loaded {len(df)} samples")
 
-# Adjust column names if needed
 X = df["text"]
 y_true = df["label"]
 
