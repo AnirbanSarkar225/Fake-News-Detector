@@ -23,7 +23,8 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-MODEL_PATH = os.path.join(PROJECT_ROOT, "model", "model_final.pkl")
+sys.path.insert(0, PROJECT_ROOT)
+MODEL_PATH = os.path.join(PROJECT_ROOT, "model", "fake_news_model.pkl")
 PREPROCESSOR_PATH = os.path.join(PROJECT_ROOT, "model", "preprocessor.pkl")
 NEWS_CSV_PATH = os.path.join(PROJECT_ROOT, "data", "news.csv")
 
@@ -32,8 +33,8 @@ NEWS_CSV_PATH = os.path.join(PROJECT_ROOT, "data", "news.csv")
 API_KEY = "AIzaSyC27TYhEGCJaOJ6gwcM8fvaUundJBpbwls"
 GOOGLE_FACTCHECK_URL = f"https://factchecktools.googleapis.com/v1alpha1/claims:search"
 
-# Check interval: 4 hours (14,400 seconds)
-CHECK_INTERVAL_SECONDS = 14400
+# Check interval: 30 minutes (1,800 seconds)
+CHECK_INTERVAL_SECONDS = 1800
 
 def map_rating_to_label(rating):
     """
@@ -60,27 +61,33 @@ def fetch_and_update_model():
         print("   and update API_KEY in this script.")
         return
 
-    params = {
-        "key": API_KEY,
-        "pageSize": 100, # Pull more claims to ensure we capture enough new ones
-        "languageCode": "en",
-        "query": "news"
-    }
+    # Query both general news and global regions for fact-checked claims
+    queries = ["news", "India", "world", "global", "USA", "Europe", "Asia", "Africa", "Americas", "Australia"]
+    all_claims = []
 
-    try:
-        response = requests.get(GOOGLE_FACTCHECK_URL, params=params, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-    except Exception as e:
-        print(f"❌ API call failed: {e}")
-        return
+    for query_term in queries:
+        params = {
+            "key": API_KEY,
+            "pageSize": 100,
+            "languageCode": "en",
+            "query": query_term
+        }
 
-    claims = data.get("claims", [])
+        try:
+            response = requests.get(GOOGLE_FACTCHECK_URL, params=params, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            claims = data.get("claims", [])
+            all_claims.extend(claims)
+            print(f"   ✓ Fetched {len(claims)} claims for query '{query_term}'")
+        except Exception as e:
+            print(f"   ⚠️ API call failed for query '{query_term}': {e}")
+
     new_texts = []
     new_labels = []
     
     # 1. Standardize and filter claims
-    for claim in claims:
+    for claim in all_claims:
         text = claim.get("text")
         claim_reviews = claim.get("claimReview", [])
         if not claim_reviews or not text:
@@ -185,7 +192,7 @@ def main():
 
     print("==================================================================")
     print("🛡️ Fake News Detector — Real-Time Background Update Daemon")
-    print(f"   Checking Google Fact Check API every {CHECK_INTERVAL_SECONDS // 3600} hours")
+    print(f"   Checking Google Fact Check API every {CHECK_INTERVAL_SECONDS // 60} minutes")
     print("==================================================================")
     
     # Run once immediately on startup
@@ -197,7 +204,7 @@ def main():
     # Infinite loop to run continuously in the background
     while True:
         try:
-            print(f"\n💤 Sleeping for {CHECK_INTERVAL_SECONDS // 3600} hours before next check...")
+            print(f"\n💤 Sleeping for {CHECK_INTERVAL_SECONDS // 60} minutes before next check...")
             time.sleep(CHECK_INTERVAL_SECONDS)
             fetch_and_update_model()
         except KeyboardInterrupt:

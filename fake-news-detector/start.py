@@ -15,6 +15,12 @@ import signal
 import subprocess
 import time
 import argparse
+import io
+
+# Fix Unicode output on Windows consoles (cp1252 can't print box-drawing/emoji)
+if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
@@ -62,13 +68,66 @@ def get_python_executable():
     return sys.executable
 
 
+def free_port(port):
+    """Kill any process occupying the given port (Windows-only)."""
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1)
+            result = s.connect_ex(('127.0.0.1', port))
+            if result != 0:
+                return  # Port is free
+    except Exception:
+        return
+    # Port is in use — try to free it
+    log("PORT", YELLOW, f"Port {port} is in use. Attempting to free it...")
+    try:
+        out = subprocess.check_output(
+            f'netstat -ano | findstr ":{port}"',
+            shell=True, text=True, stderr=subprocess.DEVNULL
+        )
+        pids = set()
+        for line in out.strip().split('\n'):
+            parts = line.split()
+            if len(parts) >= 5 and f':{port}' in parts[1]:
+                pid = parts[-1]
+                if pid.isdigit() and int(pid) != os.getpid():
+                    pids.add(int(pid))
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGTERM)
+                log("PORT", GREEN, f"Killed PID {pid} holding port {port}")
+            except (PermissionError, OSError):
+                pass
+        if pids:
+            time.sleep(1)
+    except Exception:
+        pass
+
+
 def start_api():
     """Start the FastAPI server."""
     log("API", CYAN, "Starting FastAPI server on http://localhost:8000 ...")
     py_exec = get_python_executable()
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
     return subprocess.Popen(
         [py_exec, os.path.join("src", "api_server.py")],
         cwd=PROJECT_ROOT,
+        env=env,
+    )
+
+
+def start_updater():
+    """Start the real-time background update daemon."""
+    log("UPDATE", CYAN, "Starting real-time background update daemon (30 min cycle)...")
+    py_exec = get_python_executable()
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    return subprocess.Popen(
+        [py_exec, os.path.join("scripts", "realtime_update.py")],
+        cwd=PROJECT_ROOT,
+        env=env,
     )
 
 
@@ -76,11 +135,14 @@ def start_streamlit():
     """Start the Streamlit dashboard."""
     log("APP", CYAN, "Starting Streamlit dashboard on http://localhost:8501 ...")
     py_exec = get_python_executable()
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
     return subprocess.Popen(
         [py_exec, "-m", "streamlit", "run",
          os.path.join("src", "app.py"),
-         "--server.headless", "true"],
-        cwd=PROJECT_ROOT,
+         "--server.headless", "false"],
+         cwd=PROJECT_ROOT,
+         env=env,
     )
 
 
@@ -127,12 +189,27 @@ def main():
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
+    # Free ports from any leftover processes
+    free_port(8000)
+    free_port(8501)
+
+    proc_names = {}
+
     if start_both or args.api:
-        processes.append(start_api())
+        api_proc = start_api()
+        processes.append(api_proc)
+        proc_names[api_proc] = "API Server"
         time.sleep(1)  # Let API server grab its port first
 
+        updater_proc = start_updater()
+        processes.append(updater_proc)
+        proc_names[updater_proc] = "Update Daemon"
+        time.sleep(0.5)
+
     if start_both or args.app:
-        processes.append(start_streamlit())
+        app_proc = start_streamlit()
+        processes.append(app_proc)
+        proc_names[app_proc] = "Streamlit"
 
     print()
     log("READY", GREEN, "All services are running! 🎉")
@@ -140,21 +217,28 @@ def main():
     if start_both or args.api:
         print(f"   🌐 API Server:    {BOLD}http://localhost:8000{RESET}")
         print(f"   📖 API Docs:      {BOLD}http://localhost:8000/docs{RESET}")
+        print(f"   📡 Update Daemon: Running background fact-check fetches every 30 mins")
     if start_both or args.app:
         print(f"   🖥️  Dashboard:     {BOLD}http://localhost:8501{RESET}")
     print()
     log("INFO", YELLOW, "Press Ctrl+C to stop all services.\n")
 
-    # Wait for any process to exit
+    # Wait for any CRITICAL process to exit (updater is non-critical)
+    non_critical = {"Update Daemon"}
     try:
         while True:
-            for proc in processes:
+            for proc in list(processes):
                 retcode = proc.poll()
                 if retcode is not None:
-                    name = "API Server" if proc == processes[0] else "Streamlit"
-                    log("EXIT", RED,
-                        f"{name} exited with code {retcode}")
-                    shutdown()
+                    name = proc_names.get(proc, "Process")
+                    if name in non_critical:
+                        log("EXIT", YELLOW,
+                            f"{name} exited with code {retcode} (non-critical, continuing)")
+                        processes.remove(proc)
+                    else:
+                        log("EXIT", RED,
+                            f"{name} exited with code {retcode}")
+                        shutdown()
             time.sleep(1)
     except KeyboardInterrupt:
         shutdown()
@@ -162,3 +246,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

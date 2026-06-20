@@ -1,25 +1,25 @@
 {
-  "accuracy": 0.9006490264603095,
-  "precision": 0.8900937866354045,
-  "recall": 0.9042727408069079,
-  "f1_score": 0.8971272431873569,
+  "accuracy": 0.8773773773773774,
+  "precision": 0.9234317343173432,
+  "recall": 0.8607050730868444,
+  "f1_score": 0.8909657320872274,
   "confusion_matrix": [
     [
-      6554,
-      750
+      752,
+      83
     ],
     [
-      643,
-      6074
+      162,
+      1001
     ]
   ],
   "labels": [
     "FAKE",
     "REAL"
   ],
-  "train_size": 56083,
-  "test_size": 14021,
-  "total_articles": 70104,
+  "train_size": 125290,
+  "test_size": 1998,
+  "total_articles": 127288,
   "roc_fpr": [],
   "roc_tpr": [],
   "roc_auc": 0.0

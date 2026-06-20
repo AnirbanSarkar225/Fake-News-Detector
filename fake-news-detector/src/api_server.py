@@ -33,6 +33,8 @@ app.add_middleware(
 # Global model and preprocessor
 model = None
 preprocessor = None
+model_path = os.path.join(PROJECT_ROOT, "model", "fake_news_model.pkl")
+last_loaded_mtime = 0
 
 class PredictRequest(BaseModel):
     text: str
@@ -46,23 +48,41 @@ class PredictResponse(BaseModel):
 
 def load_model():
     """Load the trained model and preprocessor."""
-    global model, preprocessor
+    global model, preprocessor, last_loaded_mtime
     try:
-        model_path = os.path.join(PROJECT_ROOT, "model", "fake_news_model.pkl")
         if os.path.exists(model_path):
             model = joblib.load(model_path)
+            last_loaded_mtime = os.path.getmtime(model_path)
+            print(f"✅ Loaded model with mtime: {last_loaded_mtime}")
         else:
             print("⚠️ Model file not found. Using fallback mode.")
             model = None
+            last_loaded_mtime = 0
         
         preprocessor = TextPreprocessor()
     except Exception as e:
         print(f"Error loading model: {e}")
         model = None
         preprocessor = TextPreprocessor()
+        last_loaded_mtime = 0
+
+def check_and_reload_model():
+    """Check if the model has been updated on disk and reload it."""
+    global model, last_loaded_mtime
+    if os.path.exists(model_path):
+        try:
+            current_mtime = os.path.getmtime(model_path)
+            if current_mtime > last_loaded_mtime:
+                print("🔄 Model file update detected on disk. Reloading model...")
+                model = joblib.load(model_path)
+                last_loaded_mtime = current_mtime
+                print("✅ Model reloaded successfully.")
+        except Exception as e:
+            print(f"⚠️ Error checking or reloading model: {e}")
 
 def predict_article(text):
     """Run prediction on article text."""
+    check_and_reload_model()
     if not preprocessor or not model:
         # Fallback: return neutral response
         return {

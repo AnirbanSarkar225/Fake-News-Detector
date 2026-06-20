@@ -19,3 +19,4 @@ shap>=0.44
 spacy>=3.7
 fastapi>=0.104
 uvicorn>=0.24
+feedparser>=6.0

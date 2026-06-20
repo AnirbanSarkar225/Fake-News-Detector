@@ -23,6 +23,7 @@ import random
 import re
 import pandas as pd
 import time
+import math
 import nltk
 from nltk.tokenize import sent_tokenize
 
@@ -45,12 +46,78 @@ def get_base64_logo():
 
 logo_base64 = get_base64_logo()
 
+
+def email_to_display_name(email):
+    """Extract a human-readable display name from an email address (Canva-style).
+    
+    Examples:
+        anirban.sarkar@gmail.com  -> Anirban Sarkar
+        john_doe123@outlook.com   -> John Doe
+        priya-sharma@yahoo.com    -> Priya Sharma
+        ceo@company.io            -> Ceo
+    """
+    if not email or "@" not in email:
+        return email or "User"
+    local_part = email.split("@")[0]
+    # Remove trailing digits (common in email handles like john.doe123)
+    cleaned = re.sub(r'\d+$', '', local_part)
+    # Split on dots, underscores, hyphens, or camelCase boundaries
+    parts = re.split(r'[._\-]+', cleaned)
+    # Filter out empty strings and very short noise tokens
+    parts = [p for p in parts if len(p) > 0]
+    if not parts:
+        return email.split("@")[0].title()
+    # Capitalize each part as a proper name
+    name_parts = [p.capitalize() for p in parts]
+    return " ".join(name_parts)
+
+
+def get_user_initials(display_name):
+    """Get 1-2 letter initials from a display name for the avatar.
+    
+    Examples:
+        Anirban Sarkar -> AS
+        John           -> J
+    """
+    if not display_name:
+        return "?"
+    words = display_name.strip().split()
+    if len(words) >= 2:
+        return (words[0][0] + words[-1][0]).upper()
+    return words[0][0].upper()
+
+
+def get_avatar_gradient(email):
+    """Deterministically assign a gradient color pair based on email hash."""
+    gradients = [
+        ("#e15b3e", "#d49b4c"),  # Terracotta → Brass
+        ("#6366f1", "#8b5cf6"),  # Indigo → Violet
+        ("#06b6d4", "#3b82f6"),  # Cyan → Blue
+        ("#f59e0b", "#ef4444"),  # Amber → Red
+        ("#10b981", "#059669"),  # Emerald → Green
+        ("#ec4899", "#8b5cf6"),  # Pink → Violet
+        ("#f97316", "#eab308"),  # Orange → Yellow
+        ("#14b8a6", "#06b6d4"),  # Teal → Cyan
+        ("#a855f7", "#6366f1"),  # Purple → Indigo
+        ("#ef4444", "#f59e0b"),  # Red → Amber
+    ]
+    idx = hash(email or "") % len(gradients)
+    return gradients[idx]
+
+
 sys.path.insert(0, PROJECT_ROOT)
 from utils.preprocess import TextPreprocessor
 from utils.scraper import ArticleScraper
 from utils.nlp_engine import NLPEngine
 from utils.source_engine import SourceEngine
 from utils.pdf_generator import generate_credibility_pdf
+
+# India live news feed (optional — gracefully degrades if feedparser missing)
+try:
+    from utils.india_news_feed import IndiaNewsFeed
+    _india_feed = IndiaNewsFeed()
+except Exception:
+    _india_feed = None
 
 st.set_page_config(
     page_title="Fake News Detector — AI Credibility Analyzer",
@@ -719,12 +786,97 @@ st.markdown("""
     div[data-baseweb="input"] ~ div {
         display: none !important;
     }
+
+    /* ══════════════════════════════════════════════════════════
+       CANVA-STYLE USER PROFILE CARD
+       ══════════════════════════════════════════════════════════ */
+    .user-profile-card {
+        background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%);
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 16px;
+        padding: 1.2rem 1rem;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        position: relative;
+        overflow: hidden;
+    }
+    .user-profile-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 3px;
+        background: var(--profile-gradient, linear-gradient(90deg, #e15b3e, #d49b4c));
+        border-radius: 16px 16px 0 0;
+        opacity: 0.8;
+    }
+    .user-profile-card:hover {
+        background: linear-gradient(135deg, rgba(255,255,255,0.065) 0%, rgba(255,255,255,0.02) 100%);
+        border-color: rgba(255,255,255,0.1);
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+    }
+    .user-avatar {
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 1.05rem;
+        font-family: var(--font-heading);
+        color: #fff;
+        flex-shrink: 0;
+        letter-spacing: 0.5px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+        text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+    .user-info {
+        flex-grow: 1;
+        min-width: 0;
+        line-height: 1.3;
+    }
+    .user-display-name {
+        font-family: var(--font-heading);
+        font-weight: 600;
+        font-size: 1rem;
+        color: var(--text-primary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+    .user-email-sub {
+        font-size: 0.76rem;
+        color: var(--text-muted);
+        font-family: var(--font-body);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-top: 2px;
+    }
+    .user-status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--success);
+        box-shadow: 0 0 6px rgba(95, 138, 107, 0.5);
+        flex-shrink: 0;
+        animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+    }
 </style>
 """, unsafe_allow_html=True)
 
 
 @st.cache_resource
-def load_model():
+def load_model(model_mtime=0.0):
     """Load the trained model pipeline."""
     model_path = os.path.join(PROJECT_ROOT, "model", "fake_news_model.pkl")
     if os.path.exists(model_path):
@@ -991,6 +1143,26 @@ def explain_pattern(pat):
         return f"Environmental Context (\"{pat_str}\")"
     if re.search(r'\b(?:meteorological|seismological|conservation|endangered)\b', pat_lower):
         return f"Conservation/Earth Sci (\"{pat_str}\")"
+
+    # India-specific institutions & context
+    if re.search(r'\b(?:lok sabha|rajya sabha|panchayat|vidhan sabha|parliament of india)\b', pat_lower):
+        return f"Indian Legislature (\"{pat_str}\")"
+    if re.search(r'\b(?:supreme court|high court|district court|nclat|tribunal)\b', pat_lower):
+        return f"Indian Judiciary (\"{pat_str}\")"
+    if re.search(r'\b(?:prime minister|chief minister|governor|president of india)\b', pat_lower):
+        return f"Indian Executive (\"{pat_str}\")"
+    if re.search(r'\b(?:isro|drdo|barc|icar|csir|iit|iim|aiims)\b', pat_lower):
+        return f"Indian Research Institution (\"{pat_str}\")"
+    if re.search(r'\b(?:rbi|sebi|niti aayog|cag|cbi|nia|ed|ncb)\b', pat_lower):
+        return f"Indian Regulatory Body (\"{pat_str}\")"
+    if re.search(r'\b(?:bcci|ipl|aiff|hockey india|sai|olympic association)\b', pat_lower):
+        return f"Indian Sports Authority (\"{pat_str}\")"
+    if re.search(r'\b(?:pti|ani|pib|doordarshan|all india radio|prasar bharati)\b', pat_lower):
+        return f"Indian News Agency (\"{pat_str}\")"
+    if re.search(r'\b(?:crore|lakh|rupee|rupees|inr)\b', pat_lower):
+        return f"Indian Financial Term (\"{pat_str}\")"
+    if re.search(r'\b(?:aadhaar|upi|gst|neet|jee|upsc|ssc)\b', pat_lower):
+        return f"Indian Public System (\"{pat_str}\")"
 
     return f"Stylistic Pattern (\"{pat_str}\")"
 
@@ -1484,7 +1656,9 @@ def load_history_callback(text):
 
 def render_dashboard():
     """Render the credibility analyzer dashboard page."""
-    model = load_model()
+    model_path = os.path.join(PROJECT_ROOT, "model", "fake_news_model.pkl")
+    model_mtime = os.path.getmtime(model_path) if os.path.exists(model_path) else 0
+    model = load_model(model_mtime)
     preprocessor = get_preprocessor()
     scraper = get_scraper()
     nlp_engine = get_nlp_engine()
@@ -1507,11 +1681,22 @@ def render_dashboard():
         return
 
     with st.sidebar:
-        st.markdown(f"### 👤 User Account")
+        # ── Canva-style User Profile Card ──
+        user_email = st.session_state.email
+        display_name = email_to_display_name(user_email)
+        initials = get_user_initials(display_name)
+        grad_start, grad_end = get_avatar_gradient(user_email)
+        
         st.markdown(f"""
-        <div class="info-box" style="margin-bottom: 0.8rem;">
-            Logged in as:<br>
-            <b style="color: var(--accent);">{st.session_state.email}</b>
+        <div class="user-profile-card" style="--profile-gradient: linear-gradient(90deg, {grad_start}, {grad_end});">
+            <div class="user-avatar" style="background: linear-gradient(135deg, {grad_start}, {grad_end});">
+                {initials}
+            </div>
+            <div class="user-info">
+                <div class="user-display-name">{display_name}</div>
+                <div class="user-email-sub">{user_email}</div>
+            </div>
+            <div class="user-status-dot" title="Online"></div>
         </div>
         """, unsafe_allow_html=True)
         if st.button("🚪 Log Out", use_container_width=True, key="sidebar_logout_btn"):
@@ -1528,15 +1713,47 @@ def render_dashboard():
             key="input_method_select"
         )
         st.markdown("---")
-        with st.expander("⚡ Live Breaking News Feed", expanded=False):
-            st.caption("Select a breaking headline to validate instantly:")
-            news_items = [
-                ("US Election: Official Results Verified in All States", "An official report confirming that all 50 states have completed their certification processes for the recent presidential election, showing no signs of systemic voting machine errors or widespread fraud as claimed in social media conspiracies."),
-                ("Breaking: Miracle Fruit Cures Diabetes in 24 Hours", "A shocking new study claims that a rare tropical miracle fruit can completely reverse type-2 diabetes within 24 hours of consumption, making insulin obsolete. Experts caution that no peer-reviewed data supports this claim."),
-                ("NASA Confirms Giant Asteroid Heading Towards Earth", "NASA astronomers have detected a large near-Earth asteroid, designation 2026-FT4, which will pass within 4.2 million miles of Earth. There is zero probability of impact, despite viral clickbait posts claiming the end of the world.")
-            ]
-            for title, body in news_items:
-                st.button(title, key=f"feed_btn_{title[:10]}", use_container_width=True, on_click=load_article_callback, args=(body,))
+        with st.expander("🇮🇳 Live India News Feed", expanded=False):
+            if _india_feed is not None:
+                feed_category = st.selectbox(
+                    "Category",
+                    _india_feed.get_categories(),
+                    index=0,
+                    key="india_feed_category",
+                    label_visibility="collapsed"
+                )
+                try:
+                    india_articles = _india_feed.fetch_category(feed_category, max_per_source=4)
+                except Exception:
+                    india_articles = []
+
+                if india_articles:
+                    st.caption(f"📡 {len(india_articles)} live headlines — click to fact-check:")
+                    for idx, article in enumerate(india_articles[:12]):
+                        src_color = _india_feed.get_source_color(article['source'])
+                        # Build a compact label with source badge
+                        btn_label = f"{article['source']}: {article['title'][:65]}"
+                        description = article.get('description', '') or article.get('title', '')
+                        st.button(
+                            btn_label,
+                            key=f"india_feed_{idx}_{feed_category[:5]}",
+                            use_container_width=True,
+                            on_click=load_article_callback,
+                            args=(description,)
+                        )
+                else:
+                    st.info("Could not fetch headlines. Check your internet connection.")
+            else:
+                st.warning("Install `feedparser` to enable live India news: `pip install feedparser`")
+                # Fallback to hardcoded items
+                st.caption("Sample headlines for testing:")
+                news_items = [
+                    ("India GDP Growth Reaches 7.2% in Q3", "India's gross domestic product grew at 7.2 percent in the October-December quarter, according to data released by the Ministry of Statistics. The growth was driven by strong performance in the manufacturing and services sectors."),
+                    ("ISRO Successfully Launches Chandrayaan-4 Mission", "The Indian Space Research Organisation successfully launched the Chandrayaan-4 lunar mission from the Satish Dhawan Space Centre in Sriharikota. The mission aims to collect and return lunar soil samples to Earth."),
+                    ("Breaking: Miracle Cure Found in Ancient Indian Herb", "A viral WhatsApp forward claims that a rare Himalayan herb can cure all diseases within 48 hours. Medical experts have debunked this claim stating there is no scientific evidence supporting these miraculous healing properties.")
+                ]
+                for title, body in news_items:
+                    st.button(title, key=f"feed_btn_{title[:10]}", use_container_width=True, on_click=load_article_callback, args=(body,))
         st.markdown("---")
         st.markdown("### Model & Dataset")
         st.markdown("""
@@ -1548,8 +1765,12 @@ def render_dashboard():
                 <li><b>LIAR:</b> ~10K PolitiFact statements</li>
                 <li><b>COVID-19:</b> ~8.5K claims & tweets</li>
                 <li><b>McIntire:</b> ~6.3K benchmark articles</li>
+                <li><b>🇮🇳 IFND:</b> Indian fact-checked news</li>
                 <li><b>Fact Check API:</b> Daily streams</li>
             </ul>
+            <div style="margin-top:8px; padding-top:6px; border-top: 1px solid rgba(255,255,255,0.08);">
+                <b>🇮🇳 Live Feeds:</b> NDTV, TOI, The Hindu
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
