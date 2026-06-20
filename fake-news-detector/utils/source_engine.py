@@ -287,3 +287,130 @@ class SourceEngine:
             "warning": ""
         }
 
+    def get_source_credibility_score(self, url_or_domain) -> float:
+        """
+        Calculate and return a single numerical credibility score (0.0 to 100.0)
+        for a domain, incorporating both base reputation and database-backed
+        user feedback.
+        """
+        profile = self.get_trust_profile(url_or_domain)
+        return float(profile.get("score", 50.0))
+
+    def get_trust_profile(self, url_or_domain) -> dict:
+        """
+        Retrieve a detailed domain trust profile including:
+        - base score
+        - bias rating
+        - category classification
+        - feedback adjustments from the local SQLite history/feedback database.
+        """
+        domain = self.clean_domain(url_or_domain)
+        if not domain:
+            return {
+                "domain": "",
+                "score": 50.0,
+                "category": "Unknown",
+                "bias": "Unknown",
+                "description": "No domain provided.",
+                "breakdown": {
+                    "base_reputation": 50.0,
+                    "feedback_adjustment": 0.0,
+                    "editorial_standards": "Unknown",
+                    "bias_score": 0.0
+                }
+            }
+
+        # 1. Base reputation lookup
+        rep = self.check_domain_reputation(domain)
+        base_score = float(rep["score"]) if rep else 50.0
+        category = rep["category"] if rep else "Unverified Source"
+        bias = rep["bias"] if rep else "Unknown"
+        description = rep["description"] if rep else "This source domain is not listed in our reputation database."
+
+        # 2. Historical database reliability feedback adjustment
+        feedback_adj = 0.0
+        import sqlite3
+        import os
+
+        # We construct the DB path dynamically
+        db_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        db_path = os.path.join(db_dir, "data", "truthshield.db")
+
+        if os.path.exists(db_path):
+            try:
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                # Find feedback entries that might belong to this domain
+                # Search in text or notes for the domain name
+                cursor.execute(
+                    "SELECT model_prediction, user_verdict FROM feedback WHERE text LIKE ? OR notes LIKE ?",
+                    (f"%{domain}%", f"%{domain}%")
+                )
+                rows = cursor.fetchall()
+                conn.close()
+
+                correct_count = 0
+                incorrect_count = 0
+                for model_pred, user_verd in rows:
+                    if not model_pred or not user_verd:
+                        continue
+                    # Standardize comparison
+                    m_p = model_pred.strip().upper()
+                    u_v = user_verd.strip().upper()
+                    if m_p == u_v:
+                        correct_count += 1
+                    else:
+                        incorrect_count += 1
+
+                # Heuristic: +2 for each verified correct case (max +10), -5 for each error (max -30)
+                feedback_adj = (correct_count * 2.0) - (incorrect_count * 5.0)
+                feedback_adj = max(-30.0, min(10.0, feedback_adj))
+            except Exception:
+                pass # Fail silently, ignore feedback adjustment if DB is locked/corrupt
+
+        final_score = max(0.0, min(100.0, base_score + feedback_adj))
+
+        # Editorial standards and bias scores
+        bias_scores = {
+            "Center": 100.0,
+            "Center-Left": 85.0,
+            "Left-Center": 85.0,
+            "Center-Right": 85.0,
+            "Right-Center": 85.0,
+            "Left": 60.0,
+            "Right": 60.0,
+            "Far-Left": 30.0,
+            "Far-Right": 30.0,
+            "Unknown": 50.0,
+            "N/A": 50.0
+        }
+        bias_score = bias_scores.get(bias, 50.0)
+
+        # Editorial standards description
+        if final_score >= 85:
+            editorial = "High (Strict fact-checking, clear corrections, objective news focus)"
+        elif final_score >= 60:
+            editorial = "Mixed (Variable editorial oversight, prominent opinion content)"
+        else:
+            editorial = "Low (Infrequent fact-checking, sensationalized or unreliable reporting)"
+
+        # Append feedback adjustment to description if non-zero
+        if feedback_adj != 0.0:
+            direction = "improved" if feedback_adj > 0 else "reduced"
+            description += f" (Score is {direction} by {abs(feedback_adj):.1f} based on local user feedback history)."
+
+        return {
+            "domain": domain,
+            "score": final_score,
+            "category": category,
+            "bias": bias,
+            "description": description,
+            "breakdown": {
+                "base_reputation": base_score,
+                "feedback_adjustment": feedback_adj,
+                "editorial_standards": editorial,
+                "bias_score": bias_score
+            }
+        }
+
+

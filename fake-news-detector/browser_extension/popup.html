@@ -1,90 +1,301 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=360">
+  <title>TruthShield</title>
   <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      width: 320px;
-      margin: 0;
-      padding: 15px;
-      background: #090706;
-      color: #f5f2eb;
+      width: 360px;
+      min-height: 200px;
+      background: #0a0e17;
+      color: #e5e7eb;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
     }
+
+    /* Header */
     .header {
-      text-align: center;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-      padding-bottom: 10px;
-      margin-bottom: 15px;
+      background: linear-gradient(135deg, #111827 0%, #1e293b 100%);
+      padding: 16px 20px;
+      border-bottom: 1px solid #1e293b;
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
-    .header h1 {
-      font-size: 16px;
-      margin: 0;
-      color: #e15b3e;
+    .header-icon { font-size: 22px; }
+    .header-title { font-size: 15px; font-weight: 700; color: #f9fafb; }
+    .header-sub { font-size: 10px; color: #6b7280; margin-top: 1px; }
+
+    /* Input area */
+    .input-section {
+      padding: 16px 20px;
+      border-bottom: 1px solid #1e293b;
     }
-    .content {
-      font-size: 12px;
-    }
-    .btn {
-      width: 100%;
-      background: linear-gradient(135deg, #e15b3e, #d49b4c);
-      color: #f5f2eb;
-      border: none;
-      padding: 8px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: bold;
-      margin-top: 10px;
-    }
-    .btn:hover {
-      opacity: 0.9;
-    }
-    .result-box {
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.06);
-      padding: 10px;
-      border-radius: 6px;
-      margin-top: 10px;
-      display: none;
-    }
-    .verdict-badge {
-      display: inline-block;
-      padding: 3px 8px;
-      border-radius: 4px;
-      font-weight: bold;
-      margin-bottom: 5px;
-    }
-    .real { background: #5f8a6b; }
-    .fake { background: #d45d4e; }
-    textarea {
+    .input-section textarea {
       width: 100%;
       height: 80px;
-      background: rgba(0,0,0,0.5);
-      border: 1px solid rgba(255,255,255,0.1);
-      color: #f5f2eb;
-      border-radius: 4px;
-      padding: 5px;
-      box-sizing: border-box;
-      resize: none;
+      background: #111827;
+      border: 1px solid #374151;
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: #e5e7eb;
+      font-size: 12px;
+      font-family: inherit;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
     }
+    .input-section textarea:focus { border-color: #60a5fa; }
+    .input-section textarea::placeholder { color: #6b7280; }
+
+    .btn-analyze {
+      width: 100%;
+      margin-top: 10px;
+      padding: 10px 0;
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      border: none;
+      border-radius: 10px;
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn-analyze:hover { opacity: 0.9; }
+    .btn-analyze:active { transform: scale(0.98); }
+    .btn-analyze:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Status message */
+    .status {
+      padding: 8px 20px;
+      font-size: 12px;
+      color: #9ca3af;
+      text-align: center;
+      display: none;
+    }
+    .status.visible { display: block; }
+    .status.error { color: #f87171; }
+
+    /* Results area */
+    .results {
+      padding: 0 20px 20px;
+      display: none;
+    }
+    .results.visible { display: block; }
+
+    /* Category badge */
+    .category-badge {
+      display: inline-block;
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin: 12px 0 14px;
+    }
+    .category-REAL { background: #065f46; color: #6ee7b7; border: 1px solid #10b981; }
+    .category-FAKE { background: #7f1d1d; color: #fca5a5; border: 1px solid #ef4444; }
+    .category-SATIRE { background: #1e3a5f; color: #93c5fd; border: 1px solid #3b82f6; }
+    .category-CLICKBAIT { background: #78350f; color: #fde68a; border: 1px solid #f59e0b; }
+    .category-MISLEADING { background: #7c2d12; color: #fdba74; border: 1px solid #f97316; }
+    .category-UNKNOWN { background: #374151; color: #d1d5db; border: 1px solid #6b7280; }
+
+    /* Score cards */
+    .score-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .score-card {
+      background: #111827;
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      padding: 10px;
+      text-align: center;
+    }
+    .score-value {
+      font-size: 22px;
+      font-weight: 700;
+    }
+    .score-label {
+      font-size: 10px;
+      color: #6b7280;
+      margin-top: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    /* Indicator bars */
+    .indicator {
+      margin-bottom: 10px;
+    }
+    .indicator-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .indicator-label {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+    .indicator-value {
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .indicator-bar {
+      height: 6px;
+      background: #1f2937;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .indicator-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.6s ease;
+    }
+
+    /* Verification results */
+    .verification-section {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid #1e293b;
+    }
+    .verification-title {
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #d1d5db;
+    }
+    .verification-item {
+      font-size: 11px;
+      padding: 4px 0;
+      color: #9ca3af;
+      border-bottom: 1px solid #111827;
+    }
+    .verification-item:last-child { border-bottom: none; }
+    .rating-true { color: #10b981; font-weight: 600; }
+    .rating-false { color: #ef4444; font-weight: 600; }
+    .rating-mixed { color: #f59e0b; font-weight: 600; }
+
+    /* Dashboard link */
+    .dashboard-link {
+      display: block;
+      text-align: center;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid #1e293b;
+      color: #60a5fa;
+      font-size: 11px;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .dashboard-link:hover { color: #93c5fd; }
   </style>
 </head>
 <body>
+  <!-- Header -->
   <div class="header">
-    <h1>🛡️ TruthShield Credibility</h1>
-  </div>
-  <div class="content">
-    <label for="textInput">Highlighted Article Text:</label>
-    <textarea id="textInput" placeholder="Highlight text on a web page and open this popup, or paste it here..."></textarea>
-    
-    <button id="verifyBtn" class="btn">Analyze Text</button>
-    
-    <div id="resultBox" class="result-box">
-      <div id="verdict" class="verdict-badge"></div>
-      <div id="confidence"></div>
-      <div id="summary" style="margin-top: 8px; font-style: italic; color: #beb3a6;"></div>
+    <span class="header-icon">🛡️</span>
+    <div>
+      <div class="header-title">TruthShield</div>
+      <div class="header-sub">AI-Powered Credibility Analysis</div>
     </div>
   </div>
+
+  <!-- Input -->
+  <div class="input-section">
+    <textarea id="newsText" placeholder="Paste article text or URL here to verify..."></textarea>
+    <button class="btn-analyze" id="analyzeBtn">🔍 Analyze Credibility</button>
+  </div>
+
+  <!-- Status -->
+  <div class="status" id="statusMsg"></div>
+
+  <!-- Results -->
+  <div class="results" id="resultsArea">
+    <!-- Category badge -->
+    <div style="text-align:center">
+      <span class="category-badge" id="categoryBadge">—</span>
+    </div>
+
+    <!-- Score cards -->
+    <div class="score-grid">
+      <div class="score-card">
+        <div class="score-value" id="credibilityScore" style="color:#10b981">—</div>
+        <div class="score-label">Credibility</div>
+      </div>
+      <div class="score-card">
+        <div class="score-value" id="confidenceScore">—</div>
+        <div class="score-label">Confidence</div>
+      </div>
+    </div>
+
+    <!-- Confidence bar -->
+    <div class="indicator" id="confidenceIndicator">
+      <div class="indicator-header">
+        <span class="indicator-label">📊 Confidence</span>
+        <span class="indicator-value" id="confidenceBarValue">—</span>
+      </div>
+      <div class="indicator-bar">
+        <div class="indicator-fill" id="confidenceBarFill" style="width:0%;background:#60a5fa"></div>
+      </div>
+    </div>
+
+    <!-- Source trust bar -->
+    <div class="indicator" id="sourceTrustIndicator" style="display:none">
+      <div class="indicator-header">
+        <span class="indicator-label">🏛️ Source Trust</span>
+        <span class="indicator-value" id="sourceTrustValue">—</span>
+      </div>
+      <div class="indicator-bar">
+        <div class="indicator-fill" id="sourceTrustFill" style="width:0%;background:#8b5cf6"></div>
+      </div>
+    </div>
+
+    <!-- Clickbait score bar -->
+    <div class="indicator" id="clickbaitIndicator" style="display:none">
+      <div class="indicator-header">
+        <span class="indicator-label">📰 Clickbait Score</span>
+        <span class="indicator-value" id="clickbaitValue">—</span>
+      </div>
+      <div class="indicator-bar">
+        <div class="indicator-fill" id="clickbaitFill" style="width:0%;background:#f59e0b"></div>
+      </div>
+    </div>
+
+    <!-- AI-generated score bar -->
+    <div class="indicator" id="aiScoreIndicator" style="display:none">
+      <div class="indicator-header">
+        <span class="indicator-label">🤖 AI-Generated Probability</span>
+        <span class="indicator-value" id="aiScoreValue">—</span>
+      </div>
+      <div class="indicator-bar">
+        <div class="indicator-fill" id="aiScoreFill" style="width:0%;background:#ec4899"></div>
+      </div>
+    </div>
+
+    <!-- Verification results -->
+    <div class="verification-section" id="verificationSection" style="display:none">
+      <div class="verification-title">🔍 Fact Verification</div>
+      <div id="verificationList"></div>
+    </div>
+
+    <!-- Dashboard link -->
+    <a href="http://localhost:8501" target="_blank" class="dashboard-link">
+      Open Full Analysis Dashboard →
+    </a>
+  </div>
+
   <script src="popup.js"></script>
 </body>
 </html>

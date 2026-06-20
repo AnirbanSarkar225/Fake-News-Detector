@@ -1,12 +1,14 @@
 """
 Text Preprocessing Module for Fake News Detector.
 
-Handles all text cleaning, normalization, and feature extraction
-required for the classification pipeline.
+Handles all text cleaning, normalization, feature extraction,
+and claim extraction required for the classification pipeline.
 """
 
 import re
 import string
+import math
+from collections import Counter
 import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize, sent_tokenize
@@ -33,6 +35,8 @@ class TextPreprocessor:
     - Stopword removal
     - Lemmatization
     - Sentence-level tokenization for explainability
+    - Claim extraction for fact verification
+    - Text feature computation for enhanced classification
     """
 
     def __init__(self):
@@ -118,7 +122,7 @@ class TextPreprocessor:
         """
         Full preprocessing pipeline for model input.
         
-        Applies cleaning, lowercasing, and stopword removal.
+        Applies cleaning, lowercasing, lemmatization, and stopword removal.
 
         Args:
             text: Raw article text
@@ -130,8 +134,8 @@ class TextPreprocessor:
         text = text.lower()
         # Fast regex tokenization: matches words of length 3 or more
         tokens = re.findall(r'\b[a-z]{3,}\b', text)
-        # Fast stopword filtering
-        tokens = [t for t in tokens if t not in self.stop_words]
+        # Lemmatize tokens for better generalization
+        tokens = [self.lemmatizer.lemmatize(t) for t in tokens if t not in self.stop_words]
         return ' '.join(tokens)
 
     def get_sentences(self, text: str) -> list:
@@ -153,6 +157,100 @@ class TextPreprocessor:
             sentences = sent_tokenize(text)
 
         return [s.strip() for s in sentences if len(s.strip()) > 20]
+
+    def extract_claims(self, text: str) -> list:
+        """
+        Extract key factual claims from article text for fact verification.
+        
+        Identifies sentences containing factual assertions — those with
+        numbers, dates, named entities, or definitive statements.
+
+        Args:
+            text: Article text
+
+        Returns:
+            List of claim strings (max 10)
+        """
+        sentences = self.get_sentences(text)
+        claims = []
+
+        # Patterns indicating factual claims
+        factual_patterns = [
+            re.compile(r'\d+'),                              # Contains numbers
+            re.compile(r'\b\d{4}\b'),                        # Year references
+            re.compile(r'\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\b', re.IGNORECASE),
+            re.compile(r'\b(?:is|was|were|has been|had been|will be|are)\b', re.IGNORECASE),  # Definitive statements
+            re.compile(r'[A-Z][a-z]+\s[A-Z][a-z]+'),        # Named entities (two consecutive capitalized words)
+            re.compile(r'\b(?:percent|million|billion|thousand|crore|lakh)\b', re.IGNORECASE),
+        ]
+
+        # Patterns to exclude (not factual claims)
+        exclude_patterns = [
+            re.compile(r'^\s*(?:I think|In my opinion|I believe|I feel)\b', re.IGNORECASE),
+            re.compile(r'\?\s*$'),  # Questions
+        ]
+
+        for sentence in sentences:
+            # Skip very short or very long sentences
+            word_count = len(sentence.split())
+            if word_count < 8 or word_count > 60:
+                continue
+
+            # Skip opinions and questions
+            if any(p.search(sentence) for p in exclude_patterns):
+                continue
+
+            # Check for factual patterns
+            match_count = sum(1 for p in factual_patterns if p.search(sentence))
+            if match_count >= 2:
+                claims.append(sentence)
+
+            if len(claims) >= 10:
+                break
+
+        return claims
+
+    def compute_text_features(self, text: str) -> dict:
+        """
+        Compute numeric features from text for enhanced classification.
+        
+        Returns features that can be used alongside TF-IDF for improved accuracy.
+
+        Args:
+            text: Article text
+
+        Returns:
+            Dictionary of numeric features
+        """
+        if not text:
+            return {
+                'word_count': 0, 'avg_word_length': 0, 'avg_sentence_length': 0,
+                'caps_ratio': 0, 'exclamation_density': 0, 'question_density': 0,
+                'unique_word_ratio': 0, 'long_word_ratio': 0,
+                'number_density': 0, 'quote_count': 0,
+            }
+
+        words = text.split()
+        word_count = len(words)
+        sentences = self.get_sentences(text) or ['']
+
+        # Basic counts
+        alpha_chars = [c for c in text if c.isalpha()]
+        caps_ratio = sum(1 for c in alpha_chars if c.isupper()) / max(len(alpha_chars), 1)
+        unique_words = set(w.lower() for w in words)
+
+        return {
+            'word_count': word_count,
+            'avg_word_length': sum(len(w) for w in words) / max(word_count, 1),
+            'avg_sentence_length': word_count / max(len(sentences), 1),
+            'caps_ratio': caps_ratio,
+            'exclamation_density': text.count('!') / max(word_count, 1),
+            'question_density': text.count('?') / max(word_count, 1),
+            'unique_word_ratio': len(unique_words) / max(word_count, 1),
+            'long_word_ratio': sum(1 for w in words if len(w) > 8) / max(word_count, 1),
+            'number_density': sum(1 for w in words if any(c.isdigit() for c in w)) / max(word_count, 1),
+            'quote_count': text.count('"') // 2 + text.count("'") // 2,
+        }
 
     def analyze_suspicious_indicators(self, text: str) -> dict:
         """

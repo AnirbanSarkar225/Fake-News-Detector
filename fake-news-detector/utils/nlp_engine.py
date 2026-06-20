@@ -322,7 +322,40 @@ class NLPEngine:
         classifier = model_pipeline.named_steps['classifier']
 
         feature_names = tfidf.get_feature_names_out()
-        weights = classifier.coef_[0]
+
+        def get_coef(clf):
+            if hasattr(clf, 'coef_'):
+                return clf.coef_
+            if hasattr(clf, 'calibrated_classifiers_') and clf.calibrated_classifiers_:
+                sub_clf = clf.calibrated_classifiers_[0]
+                if hasattr(sub_clf, 'estimator') and hasattr(sub_clf.estimator, 'coef_'):
+                    return sub_clf.estimator.coef_
+                elif hasattr(sub_clf, 'base_estimator') and hasattr(sub_clf.base_estimator, 'coef_'):
+                    return sub_clf.base_estimator.coef_
+            return None
+
+        # Extract weights from the voting classifier or single classifier
+        weights = None
+        if hasattr(classifier, 'estimators_'):
+            sub_coefs = []
+            ensemble_weights = classifier.weights if hasattr(classifier, 'weights') and classifier.weights is not None else [1] * len(classifier.estimators_)
+            
+            for sub_clf, w in zip(classifier.estimators_, ensemble_weights):
+                coef = get_coef(sub_clf)
+                if coef is not None:
+                    sub_coefs.append((coef, w))
+            
+            if sub_coefs:
+                total_w = sum(w for _, w in sub_coefs)
+                weighted_sum = sum(coef[0] * w for coef, w in sub_coefs)
+                weights = weighted_sum / total_w
+        else:
+            coef = get_coef(classifier)
+            if coef is not None:
+                weights = coef[0]
+
+        if weights is None:
+            return [], []
 
         vec = tfidf.transform([text])
         feature_indices = vec.nonzero()[1]

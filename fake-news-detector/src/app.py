@@ -460,6 +460,67 @@ st.markdown("""
         text-transform: uppercase;
         text-shadow: 0 -1px 1px rgba(0,0,0,0.3), 0 1px 2px rgba(255,255,255,0.15);
     }
+    .verdict-satire {
+        background: linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 50%, rgba(0,0,0,0.2) 100%), linear-gradient(135deg, #6366f1, #8b5cf6) !important;
+        color: #f5f2eb !important;
+        padding: 0.85rem 2.2rem;
+        border-radius: 12px;
+        font-family: var(--font-heading);
+        font-weight: 800;
+        font-size: 1.2rem;
+        display: inline-block;
+        border: 1px solid rgba(255,255,255,0.2);
+        border-top: 1px solid rgba(255,255,255,0.3);
+        box-shadow:
+            0 10px 25px rgba(99, 102, 241, 0.35),
+            0 2px 4px rgba(0,0,0,0.3),
+            inset 0 1px 0 rgba(255,255,255,0.25),
+            inset 0 -2px 5px rgba(0,0,0,0.3);
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        text-shadow: 0 -1px 1px rgba(0,0,0,0.3), 0 1px 2px rgba(255,255,255,0.15);
+    }
+    .verdict-clickbait {
+        background: linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 50%, rgba(0,0,0,0.2) 100%), linear-gradient(135deg, #f59e0b, #d97706) !important;
+        color: #f5f2eb !important;
+        padding: 0.85rem 2.2rem;
+        border-radius: 12px;
+        font-family: var(--font-heading);
+        font-weight: 800;
+        font-size: 1.2rem;
+        display: inline-block;
+        border: 1px solid rgba(255,255,255,0.2);
+        border-top: 1px solid rgba(255,255,255,0.3);
+        box-shadow:
+            0 10px 25px rgba(245, 158, 11, 0.35),
+            0 2px 4px rgba(0,0,0,0.3),
+            inset 0 1px 0 rgba(255,255,255,0.25),
+            inset 0 -2px 5px rgba(0,0,0,0.3);
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        text-shadow: 0 -1px 1px rgba(0,0,0,0.3), 0 1px 2px rgba(255,255,255,0.15);
+    }
+    .verdict-misleading {
+        background: linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 50%, rgba(0,0,0,0.2) 100%), linear-gradient(135deg, #ea580c, #c2410c) !important;
+        color: #f5f2eb !important;
+        padding: 0.85rem 2.2rem;
+        border-radius: 12px;
+        font-family: var(--font-heading);
+        font-weight: 800;
+        font-size: 1.2rem;
+        display: inline-block;
+        border: 1px solid rgba(255,255,255,0.2);
+        border-top: 1px solid rgba(255,255,255,0.3);
+        box-shadow:
+            0 10px 25px rgba(234, 88, 12, 0.35),
+            0 2px 4px rgba(0,0,0,0.3),
+            inset 0 1px 0 rgba(255,255,255,0.25),
+            inset 0 -2px 5px rgba(0,0,0,0.3);
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        text-shadow: 0 -1px 1px rgba(0,0,0,0.3), 0 1px 2px rgba(255,255,255,0.15);
+    }
+
 
     /* ══════════════════════════════════════════════════════════
        SENTENCE TRACKS — Inset physical clay/stone slots
@@ -905,11 +966,30 @@ def get_source_engine():
     return SourceEngine()
 
 
+@st.cache_resource
+def get_clickbait_detector():
+    from utils.clickbait_detector import ClickbaitDetector
+    return ClickbaitDetector()
+
+
+@st.cache_resource
+def get_ai_detector():
+    from utils.ai_detector import AIContentDetector
+    return AIContentDetector()
+
+
+@st.cache_resource
+def get_claim_verifier():
+    from utils.claim_verifier import ClaimVerifier
+    return ClaimVerifier()
+
+
+
 def create_gauge_chart(score, title="Credibility Score"):
     """Create a gauge chart with vibrant liquid glass skeuomorphic tones in organic clay & brass."""
-    if score >= 0.7:
+    if score >= 0.65:
         bar_color = "#4c705b"  # Soft Forest Sage green
-    elif score >= 0.4:
+    elif score >= 0.50:
         bar_color = "#c68b3f"  # Raw brass/Honey ochre
     else:
         bar_color = "#b24339"  # Deep rust/cinnabar crimson
@@ -928,8 +1008,8 @@ def create_gauge_chart(score, title="Credibility Score"):
             'borderwidth': 1.5,
             'bordercolor': 'rgba(255, 255, 255, 0.05)',
             'steps': [
-                {'range': [0, 35], 'color': 'rgba(178,67,57,0.04)'},
-                {'range': [35, 65], 'color': 'rgba(198,139,63,0.04)'},
+                {'range': [0, 50], 'color': 'rgba(178,67,57,0.04)'},
+                {'range': [50, 65], 'color': 'rgba(198,139,63,0.04)'},
                 {'range': [65, 100], 'color': 'rgba(76,112,91,0.04)'},
             ],
             'threshold': {
@@ -1167,26 +1247,33 @@ def explain_pattern(pat):
     return f"Stylistic Pattern (\"{pat_str}\")"
 
 
-def predict_article(text, model, preprocessor):
+def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detector=None, claim_verifier=None, source_engine=None, url=None):
     """Run prediction and analysis on article text.
 
     Blends the ML model's decision with rule-based NLP indicators so that
     short, well-written articles aren't penalised by low TF-IDF signal.
+    Also incorporates clickbait detection, AI-generated content scoring,
+    source trust lookup, and deep fact verification (RAG).
     """
     processed = preprocessor.preprocess_for_model(text)
 
-    prediction = model.predict([processed])[0]
-
+    # 1. Base ML model predictions (soft voting support)
     try:
-        decision_score = model.decision_function([processed])[0]
-        # Sigmoid-style calibration instead of raw /3.0 — maps score into
-        # a smooth 0-1 range and avoids over-confident outputs.
-        import math
-        raw_confidence = 1.0 / (1.0 + math.exp(-abs(decision_score) * 0.8))
-        # Rescale from [0.5, 1.0] → [0.0, 1.0]
-        raw_confidence = (raw_confidence - 0.5) * 2.0
+        prediction = model.predict([processed])[0]
+        probs = model.predict_proba([processed])[0]
+        classes = list(model.classes_)
+        raw_confidence = float(probs[classes.index(prediction)])
     except Exception:
-        raw_confidence = 0.5
+        # Fallback to decision function if predict_proba is not available or fails
+        try:
+            decision_score = model.decision_function([processed])[0]
+            import math
+            raw_confidence = 1.0 / (1.0 + math.exp(-abs(decision_score) * 0.8))
+            raw_confidence = (raw_confidence - 0.5) * 2.0
+            prediction = model.predict([processed])[0]
+        except Exception:
+            prediction = 'REAL'
+            raw_confidence = 0.5
 
     # ── Short-text penalty: reduce model confidence for short inputs ──
     word_count = len(text.split())
@@ -1198,11 +1285,7 @@ def predict_article(text, model, preprocessor):
     indicators = preprocessor.analyze_suspicious_indicators(text)
     sensationalism = indicators.get('sensationalism_score', 0.0)
     cred_signal = indicators.get('credibility_score', 0.0)
-
-    # NLP nudge: positive = more credible, negative = more suspicious
-    # This captures signals the ML model can miss (sourced attribution,
-    # government/policy language, formal reporting style, etc.)
-    nlp_nudge = (cred_signal - sensationalism) * 0.5  # range roughly -0.5 to +0.5
+    nlp_nudge = (cred_signal - sensationalism) * 0.5
 
     # ── Blend model score with NLP indicators ──
     if prediction == 'REAL':
@@ -1210,40 +1293,100 @@ def predict_article(text, model, preprocessor):
     else:
         model_credibility = 0.5 - (raw_confidence * 0.5)
 
-    # Weighted blend: 60% model + 40% NLP signals
     credibility = max(0.0, min(1.0, model_credibility + nlp_nudge * 0.4))
 
     # If confidence is low-to-moderate AND NLP signals lean credible,
     # soften toward neutral rather than labelling as FAKE
     if prediction == 'FAKE' and raw_confidence < 0.5 and nlp_nudge > 0:
-        credibility = max(credibility, 0.45)  # push toward "uncertain" zone
+        credibility = max(credibility, 0.45)
 
     # Possibly flip verdict if NLP strongly disagrees with a weak model call
     if credibility >= 0.5 and prediction == 'FAKE':
         prediction = 'REAL'
-        raw_confidence = credibility - 0.5  # re-derive
+        raw_confidence = credibility - 0.5
     elif credibility < 0.5 and prediction == 'REAL':
         prediction = 'FAKE'
         raw_confidence = 0.5 - credibility
 
     confidence = min(abs(credibility - 0.5) * 2.0, 1.0)
 
+    # 2. Clickbait Detection
+    if clickbait_detector is None:
+        from utils.clickbait_detector import ClickbaitDetector
+        clickbait_detector = ClickbaitDetector()
+    clickbait_res = clickbait_detector.detect(text, title=(url if url else text[:100]))
+    clickbait_score = float(clickbait_res.get("clickbait_score", 0.0))
+
+    # 3. AI-Generated Check
+    if ai_detector is None:
+        from utils.ai_detector import AIContentDetector
+        ai_detector = AIContentDetector()
+    ai_res = ai_detector.detect(text)
+    ai_score = float(ai_res.get("ai_score", 0.0))
+
+    # 4. Source Trust lookup
+    if source_engine is None:
+        from utils.source_engine import SourceEngine
+        source_engine = SourceEngine()
+    domain_to_check = url if url else text
+    source_profile = source_engine.get_trust_profile(domain_to_check)
+    source_trust = float(source_profile.get("score", 50.0))
+
+    # 5. Deep Fact Verification (RAG)
+    if claim_verifier is None:
+        from utils.claim_verifier import ClaimVerifier
+        claim_verifier = ClaimVerifier()
+    try:
+        verification_res = claim_verifier.verify_article(text)
+        verification_results = verification_res.get("verification_results", [])
+        verification_status = verification_res.get("summary", "Unverified claims.")
+    except Exception:
+        verification_results = []
+        verification_status = "Fact verification unavailable."
+
+    # 6. Multi-class Category Refinement (Option B)
+    category = prediction
+    if prediction == "REAL":
+        category = "REAL"
+    else: # FAKE
+        if clickbait_score > 0.7:
+            category = "CLICKBAIT"
+        elif source_profile.get("category") in ["Satire / Parody", "Parody"]:
+            category = "SATIRE"
+        elif confidence < 0.65 or source_trust < 50.0:
+            category = "MISLEADING"
+        else:
+            category = "FAKE"
+
+    # Sentence level analysis
     sentences = preprocessor.get_sentences(text)
     sentence_scores = []
     for sent in sentences[:20]:
         sent_processed = preprocessor.preprocess_for_model(sent)
         try:
-            sent_decision = model.decision_function([sent_processed])[0]
-            sent_suspicion = 1.0 / (1.0 + math.exp(sent_decision * 0.8))
-            sent_suspicion = min(sent_suspicion, 1.0)
+            sent_probs = model.predict_proba([sent_processed])[0]
+            sent_classes = list(model.classes_)
+            sent_suspicion = float(sent_probs[sent_classes.index('FAKE')])
         except Exception:
-            sent_suspicion = preprocessor.score_sentence_suspicion(sent)
+            try:
+                sent_decision = model.decision_function([sent_processed])[0]
+                import math
+                sent_suspicion = 1.0 / (1.0 + math.exp(sent_decision * 0.8))
+            except Exception:
+                sent_suspicion = preprocessor.score_sentence_suspicion(sent)
         sentence_scores.append((sent, sent_suspicion))
 
     return {
         'prediction': prediction,
         'confidence': confidence,
         'credibility': credibility,
+        'category': category,
+        'clickbait_score': clickbait_score,
+        'ai_score': ai_score,
+        'source_trust': source_trust,
+        'source_profile': source_profile,
+        'verification_results': verification_results,
+        'verification_status': verification_status,
         'sentence_analysis': sorted(sentence_scores, key=lambda x: x[1], reverse=True),
         'indicators': indicators,
     }
@@ -1279,6 +1422,11 @@ def init_db():
             confidence REAL,
             credibility REAL,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            category TEXT,
+            clickbait_score REAL,
+            ai_score REAL,
+            source_trust REAL,
+            verification_status TEXT,
             FOREIGN KEY(user_email) REFERENCES users(email)
         )
     """)
@@ -1295,6 +1443,34 @@ def init_db():
             FOREIGN KEY(user_email) REFERENCES users(email)
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS monitoring_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            claims_fetched INTEGER,
+            claims_new INTEGER,
+            source TEXT
+        )
+    """)
+    
+    # Database migration to ensure new columns exist in the history table
+    try:
+        cursor.execute("PRAGMA table_info(history)")
+        columns = [row[1] for row in cursor.fetchall()]
+        
+        new_cols = {
+            "category": "TEXT",
+            "clickbait_score": "REAL",
+            "ai_score": "REAL",
+            "source_trust": "REAL",
+            "verification_status": "TEXT"
+        }
+        for col, col_type in new_cols.items():
+            if col not in columns:
+                cursor.execute(f"ALTER TABLE history ADD COLUMN {col} {col_type}")
+    except Exception:
+        pass
+        
     conn.commit()
     conn.close()
 
@@ -1317,13 +1493,13 @@ def get_last_user():
     conn.close()
     return row['email'] if row else ""
 
-def save_history(email, title, text, prediction, confidence, credibility):
+def save_history(email, title, text, prediction, confidence, credibility, category=None, clickbait_score=None, ai_score=None, source_trust=None, verification_status=None):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO history (user_email, title, text, prediction, confidence, credibility)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (email, title, text, prediction, confidence, credibility))
+        INSERT INTO history (user_email, title, text, prediction, confidence, credibility, category, clickbait_score, ai_score, source_trust, verification_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (email, title, text, prediction, confidence, credibility, category, clickbait_score, ai_score, source_trust, verification_status))
     conn.commit()
     conn.close()
 
@@ -1470,8 +1646,50 @@ def start_updater_daemon():
     except Exception:
         pass
 
+def load_live_metrics():
+    """Load live metrics from evaluation_metrics.json with fallbacks."""
+    metrics_path = os.path.join(PROJECT_ROOT, "model", "evaluation_metrics.json")
+    
+    accuracy = 90.14
+    total_articles = 69957
+    model_type = "Ensemble model"
+    
+    try:
+        if os.path.exists(metrics_path):
+            with open(metrics_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if "accuracy" in data:
+                    accuracy = data["accuracy"] * 100
+                if "total_articles" in data:
+                    total_articles = data["total_articles"]
+                elif "train_size" in data and "test_size" in data:
+                    total_articles = data["train_size"] + data["test_size"]
+                if "model_type" in data:
+                    model_type = data["model_type"]
+        else:
+            # Fallback check for news.csv to count lines if it exists
+            csv_path = os.path.join(PROJECT_ROOT, "data", "news.csv")
+            if os.path.exists(csv_path):
+                # Count lines quickly
+                with open(csv_path, "r", encoding="utf-8", errors="ignore") as f:
+                    # Subtract 1 for header
+                    total_articles = sum(1 for line in f) - 1
+    except Exception:
+        pass
+        
+    return {
+        "accuracy_str": f"{accuracy:.2f}%",
+        "accuracy": accuracy,
+        "total_articles_str": f"{total_articles:,}",
+        "total_articles": total_articles,
+        "model_type": model_type
+    }
+
+
 def render_landing():
     """Render the marketing landing/homescreen page."""
+    live_metrics = load_live_metrics()
+    
     st.markdown("""
     <div class="landing-hero">
         <h1>🛡️ TruthShield Portal</h1>
@@ -1501,7 +1719,7 @@ def render_landing():
                 <span style="font-size: 3rem;">🧠</span>
                 <h4 style="margin-top: 1rem;">Natural Language Processing</h4>
                 <p style="font-size: 0.9rem; color: var(--text-secondary);">
-                    Classifies text syntax patterns, vocabulary density, and clickbait phrases using a custom TF-IDF Passive-Aggressive classifier.
+                    Classifies text syntax patterns, vocabulary density, and clickbait phrases using a custom TF-IDF Ensemble model.
                 </p>
             </div>
             """, unsafe_allow_html=True)
@@ -1536,13 +1754,13 @@ def render_landing():
     st.markdown("### 📊 Project Insights & Metrics")
     m1, m2, m3 = st.columns(3)
     with m1:
-        st.markdown("""<div class="metric-card">
-            <div class="metric-value">69,957</div>
+        st.markdown(f"""<div class="metric-card">
+            <div class="metric-value">{live_metrics['total_articles_str']}</div>
             <div class="metric-label">Articles in Model Corpus</div>
         </div>""", unsafe_allow_html=True)
     with m2:
-        st.markdown("""<div class="metric-card">
-            <div class="metric-value">90.14%</div>
+        st.markdown(f"""<div class="metric-card">
+            <div class="metric-value">{live_metrics['accuracy_str']}</div>
             <div class="metric-label">Prediction Accuracy</div>
         </div>""", unsafe_allow_html=True)
     with m3:
@@ -1552,9 +1770,9 @@ def render_landing():
         </div>""", unsafe_allow_html=True)
 
     # Footer
-    st.markdown("""
+    st.markdown(f"""
     <div class="footer">
-        <p>Fake News Detector v1.0 — Built with Streamlit, scikit-learn & NLP</p>
+        <p>Fake News Detector v2.0 — Built with Streamlit, scikit-learn & NLP</p>
         <p>This tool is for educational purposes. Always verify information with trusted sources.</p>
     </div>
     """, unsafe_allow_html=True)
@@ -1754,11 +1972,12 @@ def render_dashboard():
                 ]
                 for title, body in news_items:
                     st.button(title, key=f"feed_btn_{title[:10]}", use_container_width=True, on_click=load_article_callback, args=(body,))
+        live_metrics = load_live_metrics()
         st.markdown("---")
         st.markdown("### Model & Dataset")
-        st.markdown("""
+        st.markdown(f"""
         <div class="info-box">
-            Credibility analysis using a <b>Passive-Aggressive Classifier</b> trained on <b>69,957 news articles</b> — accuracy <b>90.14%</b>.<br><br>
+            Credibility analysis using an <b>{live_metrics['model_type']}</b> trained on <b>{live_metrics['total_articles_str']} news articles</b> — accuracy <b>{live_metrics['accuracy_str']}</b>.<br><br>
             <b>Sources:</b>
             <ul style="margin-left: -15px; margin-bottom: 0px;">
                 <li><b>ISOT:</b> ~45K Reuters articles</li>
@@ -1853,7 +2072,19 @@ def render_dashboard():
                     analysis_text = article_text
                     
             with st.spinner("🧠 Analyzing article with AI..."):
-                results = predict_article(analysis_text, model, preprocessor)
+                clickbait_detector = get_clickbait_detector()
+                ai_detector = get_ai_detector()
+                claim_verifier = get_claim_verifier()
+                source_engine = get_source_engine()
+                
+                results = predict_article(
+                    analysis_text, model, preprocessor,
+                    clickbait_detector=clickbait_detector,
+                    ai_detector=ai_detector,
+                    claim_verifier=claim_verifier,
+                    source_engine=source_engine,
+                    url=(url_input if "URL" in input_mode and url_input else None)
+                )
                 
                 # Dynamic Advanced NLP analyses
                 sentiment_data = nlp_engine.get_sentiment_metrics(analysis_text)
@@ -1864,13 +2095,7 @@ def render_dashboard():
                 shap_data = nlp_engine.explain_with_shap(analysis_text, model)
                 
                 # Check domain reputation
-                domain_profile = None
-                if "URL" in input_mode and url_input:
-                    domain_profile = source_engine.check_domain_reputation(url_input)
-                elif "http" in article_text[:500]:
-                    url_match = re.search(r'https?://[^\s/]+', article_text)
-                    if url_match:
-                        domain_profile = source_engine.check_domain_reputation(url_match.group(0))
+                domain_profile = results.get('source_profile')
 
             # Save check to database history
             words_list = article_text.strip().split()
@@ -1882,7 +2107,12 @@ def render_dashboard():
                     text=article_text,
                     prediction=results['prediction'],
                     confidence=results['confidence'],
-                    credibility=results['credibility']
+                    credibility=results['credibility'],
+                    category=results.get('category'),
+                    clickbait_score=results.get('clickbait_score'),
+                    ai_score=results.get('ai_score'),
+                    source_trust=results.get('source_trust'),
+                    verification_status=results.get('verification_status')
                 )
             except Exception:
                 pass
@@ -1898,31 +2128,40 @@ def render_dashboard():
 
                     pred = results['prediction']
                     conf = results['confidence']
+                    cat = results['category']
 
-                    if pred == 'REAL' and conf > 0.3:
+                    if cat == 'REAL':
                         verdict_class = "verdict-real"
-                        verdict_text = "✅ LIKELY CREDIBLE"
-                        verdict_desc = "This article appears to be **credible** based on our analysis."
-                    elif pred == 'FAKE' and conf > 0.3:
+                        verdict_text = "✅ LIKELY REAL"
+                        verdict_desc = "This article appears to be **credible and factual** based on our analysis."
+                    elif cat == 'SATIRE':
+                        verdict_class = "verdict-satire"
+                        verdict_text = "🎭 SATIRE / PARODY"
+                        verdict_desc = "This article is classified as **satire/parody**. It is humorous and not meant to be taken as factual news."
+                    elif cat == 'CLICKBAIT':
+                        verdict_class = "verdict-clickbait"
+                        verdict_text = "📰 CLICKBAIT"
+                        verdict_desc = "This headline contains **sensationalist clickbait** designed to entice readers."
+                    elif cat == 'MISLEADING':
+                        verdict_class = "verdict-misleading"
+                        verdict_text = "⚠️ MISLEADING"
+                        verdict_desc = "This article contains **misleading or heavily skewed framing** of facts."
+                    else: # FAKE
                         verdict_class = "verdict-fake"
                         verdict_text = "🚨 LIKELY FAKE"
-                        verdict_desc = "This article shows signs of **misinformation** or fabrication."
-                    else:
-                        verdict_class = "verdict-uncertain"
-                        verdict_text = "⚠️ UNCERTAIN"
-                        verdict_desc = "The model is **uncertain** about this article. Verify with trusted sources."
+                        verdict_desc = "This article shows high indicators of **misinformation** or fabrication."
 
                     cred_pct = results['credibility'] * 100
                     if cred_pct >= 80:
                         level_label = "Very High Credibility"
                         level_color = "#4c705b"
-                    elif cred_pct >= 60:
+                    elif cred_pct >= 65:
                         level_label = "High Credibility"
                         level_color = "#6f8f7b"
-                    elif cred_pct >= 40:
+                    elif cred_pct >= 50:
                         level_label = "Moderate Credibility"
                         level_color = "#c68b3f"
-                    elif cred_pct >= 20:
+                    elif cred_pct >= 30:
                         level_label = "Low Credibility"
                         level_color = "#d35230"
                     else:
@@ -1948,7 +2187,7 @@ def render_dashboard():
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
             indicators = results['indicators']
-            m1, m2, m3, m4 = st.columns(4)
+            m1, m2, m3, m4, m5, m6 = st.columns(6)
 
             with m1:
                 st.markdown(f"""<div class="metric-card">
@@ -1962,10 +2201,20 @@ def render_dashboard():
                 </div>""", unsafe_allow_html=True)
             with m3:
                 st.markdown(f"""<div class="metric-card">
-                    <div class="metric-value">{indicators['caps_ratio']*100:.0f}%</div>
-                    <div class="metric-label">Caps Ratio</div>
+                    <div class="metric-value">{results['source_trust']:.0f}%</div>
+                    <div class="metric-label">Source Trust</div>
                 </div>""", unsafe_allow_html=True)
             with m4:
+                st.markdown(f"""<div class="metric-card">
+                    <div class="metric-value">{results['clickbait_score']*100:.0f}%</div>
+                    <div class="metric-label">Clickbait Score</div>
+                </div>""", unsafe_allow_html=True)
+            with m5:
+                st.markdown(f"""<div class="metric-card">
+                    <div class="metric-value">{results['ai_score']*100:.0f}%</div>
+                    <div class="metric-label">AI Probability</div>
+                </div>""", unsafe_allow_html=True)
+            with m6:
                 word_count = len(article_text.split())
                 st.markdown(f"""<div class="metric-card">
                     <div class="metric-value">{word_count:,}</div>
@@ -2268,52 +2517,7 @@ def render_dashboard():
 
             # PDF & CSV Exporting Buttons
             st.markdown("<br>", unsafe_allow_html=True)
-            try:
-                pdf_bytes = generate_credibility_pdf(
-                    title=title_prefix,
-                    prediction=results['prediction'],
-                    confidence=results['confidence'],
-                    text_snippet=article_text[:500],
-                    summary=summary_data,
-                    entities=entities_data,
-                    sentiment=sentiment_data,
-                    domain_profile=domain_profile
-                )
-            except Exception:
-                pdf_bytes = b""
-                
-            csv_df = pd.DataFrame([{
-                "title": title_prefix,
-                "prediction": results['prediction'],
-                "confidence": results['confidence'],
-                "summary": summary_data,
-                "fear_score": sentiment_data['fear'],
-                "anger_score": sentiment_data['anger'],
-                "neutral_score": sentiment_data['neutral'],
-                "people": ", ".join(entities_data['people']),
-                "organizations": ", ".join(entities_data['organizations']),
-                "locations": ", ".join(entities_data['locations'])
-            }])
-            csv_bytes = csv_df.to_csv(index=False).encode('utf-8')
             
-            col_dl1, col_dl2 = st.columns(2)
-            with col_dl1:
-                st.download_button(
-                    label="📥 Download PDF Report",
-                    data=pdf_bytes,
-                    file_name=f"truthshield_{int(time.time())}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True
-                )
-            with col_dl2:
-                st.download_button(
-                    label="📊 Export Data as CSV",
-                    data=csv_bytes,
-                    file_name=f"truthshield_{int(time.time())}.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-
             has_suspicious = bool(indicators['suspicious_patterns'])
             has_credible = bool(indicators['credibility_indicators'])
 
@@ -2343,6 +2547,132 @@ def render_dashboard():
                     st.caption("Phrases and keywords indicating citations, official statements, and objective reporting.")
                     badges_html = "".join([f'<span class="badge-credible">✅ {explain_pattern(pat)}</span>' for pat in sorted(set(indicators['credibility_indicators'][:15]))])
                     st.markdown(f'<div style="margin-top: 0.5rem;">{badges_html}</div>', unsafe_allow_html=True)
+
+            # RAG Fact Verification Block
+            st.markdown("<br>", unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown("#### 🔍 RAG Fact Verification & Claims Check")
+                st.caption("Factual claims extracted and verified against Google Fact Check API and Wikipedia.")
+                
+                if results.get('verification_results'):
+                    for v in results['verification_results']:
+                        claim_text = v.get('claim_text') or v.get('claim')
+                        rating = v.get('rating') or "Unverified"
+                        rating_lower = rating.lower()
+                        url_ref = v.get('url')
+                        source_ref = v.get('source')
+                        
+                        if rating_lower in ['true', 'correct', 'verified', 'credible']:
+                            verdict_emoji = "✅"
+                            badge_color = "rgba(95, 138, 107, 0.15)"
+                            text_color = "#5f8a6b"
+                        elif rating_lower in ['false', 'incorrect', 'misleading', 'fake', 'debunked']:
+                            verdict_emoji = "❌"
+                            badge_color = "rgba(212, 93, 78, 0.15)"
+                            text_color = "#d45d4e"
+                        else:
+                            verdict_emoji = "❓"
+                            badge_color = "rgba(212, 155, 76, 0.12)"
+                            text_color = "#d49b4c"
+                            
+                        with st.expander(f"{verdict_emoji} Claim: \"{claim_text}\" — **{rating}**"):
+                            st.markdown(f"<div style='background:{badge_color}; padding:12px; border-radius:8px; border-left:4px solid {text_color};'>", unsafe_allow_html=True)
+                            st.markdown(f"**Verification Rating:** {rating}")
+                            if source_ref:
+                                st.markdown(f"**Fact-Checking Entity:** {source_ref}")
+                            if url_ref:
+                                st.markdown(f"**Verification Source Link:** [View Verification Details]({url_ref})")
+                            st.markdown("</div>", unsafe_allow_html=True)
+                else:
+                    st.info("No verified historical fact checks were matched for the claims extracted from this article.")
+
+            # Explainable AI (XAI) Panel
+            with st.container(border=True):
+                st.markdown("#### 🔬 Explainable AI (XAI) Reasoning")
+                st.caption("How our multi-class model and heuristic detectors combined to produce this verdict.")
+                
+                col_x1, col_x2 = st.columns([2, 3])
+                with col_x1:
+                    st.markdown("**Metric Contribution Breakdown:**")
+                    st.markdown(f"🏛️ **Source Trust Score:** `{results['source_trust']:.0f}%`")
+                    st.markdown(f"📰 **Clickbait Score:** `{results['clickbait_score']*100:.1f}%`")
+                    st.markdown(f"🤖 **AI-Generated Probability:** `{results['ai_score']*100:.1f}%`")
+                    st.markdown(f"🎯 **Model Confidence:** `{results['confidence']*100:.1f}%`")
+                with col_x2:
+                    st.markdown("**Plain English Logic Explanation:**")
+                    cat_explain = ""
+                    cat_val = results['category']
+                    if cat_val == 'REAL':
+                        cat_explain = "This article was classified as **REAL** because the Voting Classifier ensemble predicted it as credible, the source domain has standard editorial credibility, and clickbait/AI-generation features were not significantly present."
+                    elif cat_val == 'SATIRE':
+                        cat_explain = "This article was classified as **SATIRE** because the source domain is identified in our reputation database as a known satire or parody publication."
+                    elif cat_val == 'CLICKBAIT':
+                        cat_explain = "This article was classified as **CLICKBAIT** because the sensationalism score exceeded the threshold, indicating the headline is formulated primarily to drive clicks."
+                    elif cat_val == 'MISLEADING':
+                        cat_explain = "This article was classified as **MISLEADING** because the model predicted it as FAKE with low-to-moderate confidence, indicating mixed credibility signals, or the source domain has a low reputation score."
+                    else: # FAKE
+                        cat_explain = "This article was classified as **FAKE** because the ML ensemble predicted it as FAKE with high confidence, supported by negative linguistic indicators and lack of trusted source alignment."
+                    st.markdown(cat_explain)
+
+            # Add Feedback Loop & Action Center
+            st.markdown("---")
+            try:
+                pdf_bytes = generate_credibility_pdf(
+                    title=title_prefix,
+                    summary=summary_data,
+                    prediction=results['prediction'],
+                    confidence=results['confidence'],
+                    credibility=results['credibility'],
+                    indicators=indicators,
+                    domain_profile=domain_profile,
+                    sentiment=sentiment_data,
+                    entities=entities_data,
+                    category=results.get('category'),
+                    clickbait_score=results.get('clickbait_score'),
+                    ai_score=results.get('ai_score'),
+                    verification_results=results.get('verification_results'),
+                    source_trust=results.get('source_trust'),
+                    explanation=cat_explain
+                )
+            except Exception:
+                pdf_bytes = b""
+                
+            csv_df = pd.DataFrame([{
+                "title": title_prefix,
+                "prediction": results['prediction'],
+                "confidence": results['confidence'],
+                "category": results.get('category', results['prediction']),
+                "credibility": results['credibility'],
+                "clickbait_score": results.get('clickbait_score', 0.0),
+                "ai_score": results.get('ai_score', 0.0),
+                "source_trust": results.get('source_trust', 50.0),
+                "summary": summary_data,
+                "fear_score": sentiment_data['fear'],
+                "anger_score": sentiment_data['anger'],
+                "neutral_score": sentiment_data['neutral'],
+                "people": ", ".join(entities_data['people']),
+                "organizations": ", ".join(entities_data['organizations']),
+                "locations": ", ".join(entities_data['locations'])
+            }])
+            csv_bytes = csv_df.to_csv(index=False).encode('utf-8')
+            
+            col_dl1, col_dl2 = st.columns(2)
+            with col_dl1:
+                st.download_button(
+                    label="📥 Download PDF Report",
+                    data=pdf_bytes,
+                    file_name=f"truthshield_{int(time.time())}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+            with col_dl2:
+                st.download_button(
+                    label="📊 Export Data as CSV",
+                    data=csv_bytes,
+                    file_name=f"truthshield_{int(time.time())}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
 
             # Add Feedback Loop & Action Center
             st.markdown("---")
@@ -2684,13 +3014,29 @@ def render_dashboard():
             
             with col_a1:
                 with st.container(border=True):
-                    st.markdown("#### Factual Accuracy Ratios")
-                    pred_counts = df_history['prediction'].value_counts()
+                    st.markdown("#### Factual Category Breakdown")
+                    # Fill null categories with base prediction
+                    if 'category' in df_history.columns:
+                        cat_series = df_history['category'].fillna(df_history['prediction'])
+                    else:
+                        cat_series = df_history['prediction']
+                    cat_counts = cat_series.value_counts()
+                    
+                    # Map categories to their representative styling colors
+                    theme_colors = {
+                        "REAL": "#4c705b",       # Sage green
+                        "FAKE": "#b24339",       # Rust red
+                        "SATIRE": "#6366f1",     # Indigo
+                        "CLICKBAIT": "#f59e0b",   # Amber
+                        "MISLEADING": "#ea580c"   # Orange
+                    }
+                    colors_list = [theme_colors.get(str(l).upper(), "#a8a29e") for l in cat_counts.index]
+                    
                     fig_pie = go.Figure(data=[go.Pie(
-                        labels=pred_counts.index,
-                        values=pred_counts.values,
+                        labels=cat_counts.index,
+                        values=cat_counts.values,
                         hole=.3,
-                        marker_colors=["#5f8a6b" if l == "REAL" else "#d45d4e" for l in pred_counts.index]
+                        marker_colors=colors_list
                     )])
                     fig_pie.update_layout(
                         paper_bgcolor='rgba(0,0,0,0)',
@@ -2812,11 +3158,11 @@ def render_dashboard():
                     st.metric("Total Feedback Items", len(misclassified) if misclassified else "No feedback yet")
             with col_fb2:
                 with st.container(border=True):
-                    disagreements = sum(1 for item in misclassified if item['user_verdict'] == 'Disagree with AI')
+                    disagreements = sum(1 for item in misclassified if (item['user_verdict'] or '') == 'Disagree with AI')
                     st.metric("Disagreements Logged", disagreements)
             with col_fb3:
                 with st.container(border=True):
-                    low_ratings = sum(1 for item in misclassified if item['rating'] <= 2)
+                    low_ratings = sum(1 for item in misclassified if (item['rating'] or 0) <= 2)
                     st.metric("Low Accuracy Ratings", low_ratings)
             
             if misclassified:
@@ -2825,8 +3171,8 @@ def render_dashboard():
                     for article in misclassified[:10]:
                         col_art1, col_art2 = st.columns([3, 1])
                         with col_art1:
-                            st.markdown(f"**Model said:** `{article['model_prediction']}` → **You said:** `{article['user_verdict']}`")
-                            st.caption(f"Rating: {'⭐' * article['rating']} | Notes: {article['notes'][:100] if article['notes'] else 'N/A'}")
+                            st.markdown(f"**Model said:** `{article['model_prediction'] or 'Unknown'}` → **You said:** `{article['user_verdict'] or 'Unknown'}`")
+                            st.caption(f"Rating: {'⭐' * (article['rating'] or 0)} | Notes: {article['notes'][:100] if article['notes'] else 'N/A'}")
                         with col_art2:
                             st.caption(f"📅 {article['timestamp']}")
         except Exception as e:
@@ -2947,29 +3293,74 @@ def render_dashboard():
         if not history_items:
             st.info("💡 You haven't analyzed any articles yet. Head over to the **Credibility Analyzer** tab to check your first story!")
         else:
-            for item in history_items:
-                title = item['title'] or "Pasted Text Analysis"
-                snippet = item['text'][:120] + "..." if len(item['text']) > 120 else item['text']
-                time_str = item['timestamp']
-                pred = item['prediction']
-                score = item['credibility'] * 100
+            # 🔍 Search and Filters section
+            st.markdown("### 🔍 Search & Filters")
+            col_f1, col_f2, col_f3 = st.columns(3)
+            with col_f1:
+                search_query = st.text_input("Search by title or content:", "", key="hist_search")
+            with col_f2:
+                categories_list = ["ALL", "REAL", "FAKE", "SATIRE", "CLICKBAIT", "MISLEADING"]
+                filter_cat = st.selectbox("Filter by Category:", categories_list, key="hist_filter_cat")
+            with col_f3:
+                cred_min, cred_max = st.slider("Credibility Score range:", 0, 100, (0, 100), key="hist_filter_cred")
+
+            # Convert to DataFrame
+            df_hist = pd.DataFrame([dict(item) for item in history_items])
+            if 'category' not in df_hist.columns:
+                df_hist['category'] = df_hist['prediction']
+            else:
+                df_hist['category'] = df_hist['category'].fillna(df_hist['prediction'])
+
+            # Apply filters
+            if search_query:
+                df_hist = df_hist[df_hist['title'].str.contains(search_query, case=False, na=False) | 
+                                  df_hist['text'].str.contains(search_query, case=False, na=False)]
+            if filter_cat != "ALL":
+                df_hist = df_hist[df_hist['category'].str.upper() == filter_cat]
                 
-                if pred == 'REAL':
-                    badge_style = "background:#4c705b; color:#fdfbf7;"
-                    badge_label = "Credible"
-                else:
-                    badge_style = "background:#b24339; color:#fdfbf7;"
-                    badge_label = "Fake"
-                
-                with st.container(border=True):
-                    col_h_info, col_h_score, col_h_btn = st.columns([3, 1.2, 1])
-                    with col_h_info:
-                        st.markdown(f"**{title}**")
-                        st.caption(f"🕒 {time_str} | *Snippet:* {snippet}")
-                    with col_h_score:
-                        st.markdown(f"<span style='padding:0.35rem 0.8rem; border-radius:6px; font-weight:bold; {badge_style}'>{badge_label} ({score:.0f}%)</span>", unsafe_allow_html=True)
-                    with col_h_btn:
-                        st.button("🔎 Load Analysis", key=f"hist_load_{item['id']}", use_container_width=True, on_click=load_history_callback, args=(item['text'],))
+            df_hist = df_hist[(df_hist['credibility'] * 100 >= cred_min) & (df_hist['credibility'] * 100 <= cred_max)]
+
+            # CSV Export button
+            if not df_hist.empty:
+                csv_export = df_hist.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Export Filtered History as CSV",
+                    data=csv_export,
+                    file_name="truthshield_filtered_history.csv",
+                    mime="text/csv"
+                )
+            
+            st.markdown("---")
+
+            if df_hist.empty:
+                st.info("No history items match your search filters.")
+            else:
+                for idx, row in df_hist.iterrows():
+                    title = row['title'] or "Pasted Text Analysis"
+                    snippet = row['text'][:120] + "..." if len(row['text']) > 120 else row['text']
+                    time_str = row['timestamp']
+                    pred = row['prediction']
+                    cat = row['category'] or pred
+                    score = row['credibility'] * 100
+                    
+                    theme_colors = {
+                        "REAL": "background:#4c705b; color:#fdfbf7;",       # Sage green
+                        "FAKE": "background:#b24339; color:#fdfbf7;",       # Rust red
+                        "SATIRE": "background:#6366f1; color:#fdfbf7;",     # Indigo
+                        "CLICKBAIT": "background:#f59e0b; color:#fdfbf7;",   # Amber
+                        "MISLEADING": "background:#ea580c; color:#fdfbf7;"   # Orange
+                    }
+                    badge_style = theme_colors.get(cat.upper(), "background:#a8a29e; color:#fdfbf7;")
+                    
+                    with st.container(border=True):
+                        col_h_info, col_h_score, col_h_btn = st.columns([3, 1.2, 1])
+                        with col_h_info:
+                            st.markdown(f"**{title}**")
+                            st.caption(f"🕒 {time_str} | *Category:* **{cat}** | *Snippet:* {snippet}")
+                        with col_h_score:
+                            st.markdown(f"<span style='padding:0.35rem 0.8rem; border-radius:6px; font-weight:bold; {badge_style}'>{cat} ({score:.0f}%)</span>", unsafe_allow_html=True)
+                        with col_h_btn:
+                            st.button("🔎 Load Analysis", key=f"hist_load_{row['id']}", use_container_width=True, on_click=load_history_callback, args=(row['text'],))
 
     st.markdown("""
     <div class="footer">

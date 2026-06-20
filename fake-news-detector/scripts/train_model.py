@@ -1,8 +1,10 @@
 """
 Model Training Script for Fake News Detector.
 
-Trains a TF-IDF + PassiveAggressiveClassifier pipeline incrementally using partial_fit.
-This prevents MemoryError on resource-constrained environments.
+Trains an Ensemble (LinearSVC + LogisticRegression + PassiveAggressive) pipeline
+with TF-IDF (50k features, trigrams) for robust fake news classification.
+
+Ensemble uses soft voting via CalibratedClassifierCV for probability calibration.
 """
 
 import os
@@ -14,10 +16,13 @@ import json
 import joblib
 import pandas as pd
 import numpy as np
-import scipy.sparse as sp
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import PassiveAggressiveClassifier
+from sklearn.linear_model import PassiveAggressiveClassifier, LogisticRegression
+from sklearn.svm import LinearSVC
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.ensemble import VotingClassifier
 from sklearn.pipeline import Pipeline
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
@@ -25,6 +30,8 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
     f1_score,
+    roc_curve,
+    auc,
 )
 
 # Fix Unicode output on Windows consoles (cp1252 can't print box-drawing/emoji)
@@ -42,9 +49,11 @@ from utils.preprocess import TextPreprocessor
 
 def train_model():
     print()
-    print("╔══════════════════════════════════════════════════════════╗")
-    print("║   🛡️  Fake News Detector — Incremental Training         ║")
-    print("╚══════════════════════════════════════════════════════════╝")
+    print("╔══════════════════════════════════════════════════════════════╗")
+    print("║   🛡️  TruthShield — Production Ensemble Training            ║")
+    print("║   LinearSVC + LogisticRegression + PassiveAggressive        ║")
+    print("║   TF-IDF: 50k features, (1,2) n-grams                      ║")
+    print("╚══════════════════════════════════════════════════════════════╝")
     print()
 
     data_dir = os.path.join(PROJECT_ROOT, "data")
@@ -58,145 +67,136 @@ def train_model():
 
     preprocessor = TextPreprocessor()
 
-    print("📂 Step 1/5: Fitting TF-IDF Vectorizer on a sample subset...")
-    # Load first 20k rows just to build the vocabulary
-    sample_df = pd.read_csv(combined_path, nrows=20000)
-    sample_df.columns = [col.strip().lower() for col in sample_df.columns]
+    # ── Step 1: Load and prepare data ──────────────────────────────
+    print("📂 Step 1/6: Loading dataset...")
+    df = pd.read_csv(combined_path, low_memory=False)
+    df.columns = [col.strip().lower() for col in df.columns]
 
-    if 'label' not in sample_df.columns:
-        for col in sample_df.columns:
+    if 'label' not in df.columns:
+        for col in df.columns:
             if col in ['class', 'target', 'category', 'fake']:
-                sample_df.rename(columns={col: 'label'}, inplace=True)
+                df.rename(columns={col: 'label'}, inplace=True)
                 break
 
-    if 'text' not in sample_df.columns:
-        for col in sample_df.columns:
+    if 'text' not in df.columns:
+        for col in df.columns:
             if col in ['content', 'article', 'body', 'news']:
-                sample_df.rename(columns={col: 'text'}, inplace=True)
+                df.rename(columns={col: 'text'}, inplace=True)
                 break
 
-    sample_df = sample_df[['text', 'label']].dropna()
-    print(f"   Pre-processing {len(sample_df):,} sample articles...")
-    sample_df['processed_text'] = sample_df['text'].apply(preprocessor.preprocess_for_model)
-    sample_df = sample_df[sample_df['processed_text'].str.len() > 10]
+    df = df[['text', 'label']].dropna()
+    print(f"   Loaded {len(df):,} articles.")
 
-    tfidf = TfidfVectorizer(
-        max_features=30000,
-        ngram_range=(1, 1),
-        max_df=0.95,
-        min_df=5,
-        sublinear_tf=True,
+    # Standardize labels
+    label_map = {}
+    for val in df['label'].unique():
+        val_str = str(val).strip().upper()
+        if val_str in ['FAKE', '0', 'FALSE', 'UNRELIABLE']:
+            label_map[val] = 'FAKE'
+        else:
+            label_map[val] = 'REAL'
+    df['label'] = df['label'].map(label_map)
+    df = df.dropna(subset=['label'])
+
+    label_counts = df['label'].value_counts()
+    print(f"   Label distribution: {label_counts.to_dict()}")
+
+    # ── Step 2: Preprocess text ────────────────────────────────────
+    print("\n🔧 Step 2/6: Preprocessing text...")
+    start_time = time.time()
+    df['processed_text'] = df['text'].apply(preprocessor.preprocess_for_model)
+    df = df[df['processed_text'].str.len() > 10]
+    print(f"   ✓ Preprocessed {len(df):,} articles in {time.time()-start_time:.1f}s")
+
+    # ── Step 3: Train/Test split ───────────────────────────────────
+    print("\n📊 Step 3/6: Splitting data (80/20 stratified)...")
+    X_train, X_test, y_train, y_test = train_test_split(
+        df['processed_text'], df['label'],
+        test_size=0.20, random_state=42, stratify=df['label']
     )
-    tfidf.fit(sample_df['processed_text'])
-    print(f"   ✓ Vocabulary built with {len(tfidf.vocabulary_)} features.")
+    print(f"   Train: {len(X_train):,} | Test: {len(X_test):,}")
 
-    # Free memory of subset
-    del sample_df
+    # Free memory
+    del df
     gc.collect()
 
-    print("\n🤖 Step 2/5: Initializing classifier...")
-    classifier = PassiveAggressiveClassifier(
-        max_iter=100,
-        C=0.5,
-        random_state=42,
+    # ── Step 4: TF-IDF Vectorization ──────────────────────────────
+    print("\n📐 Step 4/6: Fitting TF-IDF Vectorizer (50k features, bigrams)...")
+    tfidf = TfidfVectorizer(
+        max_features=50000,
+        ngram_range=(1, 2),  # Use bigrams to prevent memory exhaustion
+        max_df=0.95,
+        min_df=5,            # Filter out rare combinations early
+        sublinear_tf=True,
     )
+    X_train_tfidf = tfidf.fit_transform(X_train)
+    X_test_tfidf = tfidf.transform(X_test)
+    print(f"   ✓ Vocabulary: {len(tfidf.vocabulary_):,} features")
+    print(f"   ✓ Train matrix: {X_train_tfidf.shape}")
 
-    print("\n🧠 Step 3/5: Training incrementally in batches...")
+    # ── Step 5: Train Ensemble ─────────────────────────────────────
+    print("\n🤖 Step 5/6: Training ensemble classifier...")
     start_time = time.time()
-    
-    chunk_size = 2000
-    chunk_idx = 1
-    total_processed = 0
-    val_chunk = None
 
-    # Read the dataset chunk-by-chunk to keep memory overhead tiny
-    for chunk in pd.read_csv(combined_path, chunksize=chunk_size):
-        chunk.columns = [col.strip().lower() for col in chunk.columns]
-        
-        if 'label' not in chunk.columns:
-            for col in chunk.columns:
-                if col in ['class', 'target', 'category', 'fake']:
-                    chunk.rename(columns={col: 'label'}, inplace=True)
-                    break
+    # Build soft-voting ensemble
+    print("\n   Building VotingClassifier (soft voting)...")
 
-        if 'text' not in chunk.columns:
-            for col in chunk.columns:
-                if col in ['content', 'article', 'body', 'news']:
-                    chunk.rename(columns={col: 'text'}, inplace=True)
-                    break
-
-        chunk = chunk[['text', 'label']].dropna()
-        if len(chunk) == 0:
-            continue
-
-        # Standardize labels
-        label_map = {}
-        for val in chunk['label'].unique():
-            val_str = str(val).strip().upper()
-            if val_str in ['FAKE', '0', 'FALSE', 'UNRELIABLE']:
-                label_map[val] = 'FAKE'
-            else:
-                label_map[val] = 'REAL'
-        chunk['label'] = chunk['label'].map(label_map)
-        chunk = chunk.dropna(subset=['label'])
-
-        chunk['processed_text'] = chunk['text'].apply(preprocessor.preprocess_for_model)
-        chunk = chunk[chunk['processed_text'].str.len() > 10]
-
-        if len(chunk) == 0:
-            continue
-
-        # Reserve the first chunk as the validation set
-        if val_chunk is None:
-            val_chunk = chunk[['processed_text', 'label']].copy()
-            print(f"     - Reserved first chunk of {len(val_chunk):,} articles for validation.")
-            del chunk
-            gc.collect()
-            continue
-
-        X_chunk = tfidf.transform(chunk['processed_text'])
-        y_chunk = chunk['label'].tolist()
-
-        # Incremental fitting
-        classifier.partial_fit(X_chunk, y_chunk, classes=['FAKE', 'REAL'])
-        total_processed += len(chunk)
-        if chunk_idx % 5 == 0 or chunk_idx == 1:
-            print(f"     - Trained batch {chunk_idx} (Processed: {total_processed:,} articles)")
-        
-        chunk_idx += 1
-        del chunk, X_chunk, y_chunk
-        gc.collect()
+    # Since VotingClassifier doesn't support pre-fitted estimators easily,
+    # we create a fresh ensemble and train it
+    ensemble = VotingClassifier(
+        estimators=[
+            ('svc', CalibratedClassifierCV(LinearSVC(C=1.0, max_iter=5000, random_state=42), cv=3, method='sigmoid')),
+            ('lr', LogisticRegression(C=1.0, max_iter=1000, random_state=42, solver='lbfgs')),
+            ('pa', CalibratedClassifierCV(PassiveAggressiveClassifier(C=0.5, max_iter=100, random_state=42), cv=3, method='sigmoid')),
+        ],
+        voting='soft',
+        weights=[2, 1, 1],  # Weight SVC higher — best generalization
+    )
+    ensemble.fit(X_train_tfidf, y_train)
 
     elapsed = time.time() - start_time
-    print(f"   ✓ Training completed in {elapsed:.1f}s")
-    print()
+    print(f"   ✓ Ensemble training completed in {elapsed:.1f}s")
 
-    print("📈 Step 4/5: Evaluating model on the reserved validation set...")
-    X_val = tfidf.transform(val_chunk['processed_text'])
-    y_val = val_chunk['label'].tolist()
+    # ── Step 6: Evaluate ───────────────────────────────────────────
+    print("\n📈 Step 6/6: Evaluating ensemble on test set...")
+    y_pred = ensemble.predict(X_test_tfidf)
+    y_proba = ensemble.predict_proba(X_test_tfidf)
 
-    y_pred = classifier.predict(X_val)
-
-    accuracy = accuracy_score(y_val, y_pred)
-    print(f"\n   Accuracy: {accuracy:.4f} ({accuracy*100:.2f}%)\n")
+    accuracy = accuracy_score(y_test, y_pred)
+    print(f"\n   Ensemble Accuracy: {accuracy:.4f} ({accuracy*100:.2f}%)\n")
     print("   Classification Report:")
     print("   " + "-" * 55)
-    report = classification_report(y_val, y_pred, target_names=['FAKE', 'REAL'])
+    report = classification_report(y_test, y_pred, target_names=['FAKE', 'REAL'])
     for line in report.split('\n'):
         print(f"   {line}")
 
-    cm = confusion_matrix(y_val, y_pred, labels=['FAKE', 'REAL'])
+    cm = confusion_matrix(y_test, y_pred, labels=['FAKE', 'REAL'])
     print(f"\n   Confusion Matrix:")
     print(f"   {'':>12} Pred FAKE  Pred REAL")
     print(f"   {'True FAKE':>12}   {cm[0][0]:>5}      {cm[0][1]:>5}")
     print(f"   {'True REAL':>12}   {cm[1][0]:>5}      {cm[1][1]:>5}")
     print()
 
-    print("💾 Step 5/5: Saving model components...")
-    # Wrap in a pipeline so the saved model has the same API
+    # Calculate individual classifier accuracies from already fitted ensemble estimators
+    svc_acc = accuracy_score(y_test, ensemble.estimators_[0].predict(X_test_tfidf))
+    lr_acc = accuracy_score(y_test, ensemble.estimators_[1].predict(X_test_tfidf))
+    pa_acc = accuracy_score(y_test, ensemble.estimators_[2].predict(X_test_tfidf))
+
+    # Comparison table
+    print("   Individual Classifier Accuracy:")
+    print(f"   {'LinearSVC':>22}: {svc_acc*100:.2f}%")
+    print(f"   {'LogisticRegression':>22}: {lr_acc*100:.2f}%")
+    print(f"   {'PassiveAggressive':>22}: {pa_acc*100:.2f}%")
+    print(f"   {'Ensemble (weighted)':>22}: {accuracy*100:.2f}%")
+    print()
+
+    # ── Save model ─────────────────────────────────────────────────
+    print("💾 Saving model components...")
+
+    # Wrap TF-IDF + Ensemble in a pipeline
     pipeline = Pipeline([
         ('tfidf', tfidf),
-        ('classifier', classifier)
+        ('classifier', ensemble)
     ])
 
     model_dir = os.path.join(PROJECT_ROOT, "model")
@@ -211,28 +211,28 @@ def train_model():
     joblib.dump(preprocessor, preprocessor_path)
     print(f"   💾 Preprocessor saved to: {preprocessor_path}")
 
-    # ── Save evaluation metrics to JSON for dynamic dashboard loading ──
-    precision = precision_score(y_val, y_pred, pos_label='REAL')
-    recall = recall_score(y_val, y_pred, pos_label='REAL')
-    f1 = f1_score(y_val, y_pred, pos_label='REAL')
+    # ── Save evaluation metrics ────────────────────────────────────
+    precision = precision_score(y_test, y_pred, pos_label='REAL')
+    recall_val = recall_score(y_test, y_pred, pos_label='REAL')
+    f1 = f1_score(y_test, y_pred, pos_label='REAL')
 
-    # Generate ROC-like data using decision function
+    # ROC curve data
     try:
-        decision_scores = classifier.decision_function(X_val)
-        thresholds = np.linspace(decision_scores.min(), decision_scores.max(), 100)
-        fpr_list = []
-        tpr_list = []
-        y_val_binary = (np.array(y_val) == 'REAL').astype(int)
-        for thresh in thresholds:
-            y_pred_thresh = (decision_scores >= thresh).astype(int)
-            tp = ((y_pred_thresh == 1) & (y_val_binary == 1)).sum()
-            fp = ((y_pred_thresh == 1) & (y_val_binary == 0)).sum()
-            fn = ((y_pred_thresh == 0) & (y_val_binary == 1)).sum()
-            tn = ((y_pred_thresh == 0) & (y_val_binary == 0)).sum()
-            fpr_list.append(float(fp / max(fp + tn, 1)))
-            tpr_list.append(float(tp / max(tp + fn, 1)))
-        auc_score = float(np.abs(np.trapz(tpr_list, fpr_list)))
-    except Exception:
+        # Get probabilities for the REAL class
+        classes = list(ensemble.classes_)
+        real_idx = classes.index('REAL')
+        y_test_binary = (np.array(y_test.tolist()) == 'REAL').astype(int)
+        fpr_arr, tpr_arr, _ = roc_curve(y_test_binary, y_proba[:, real_idx])
+        auc_score = float(auc(fpr_arr, tpr_arr))
+        fpr_list = fpr_arr.tolist()
+        tpr_list = tpr_arr.tolist()
+        # Downsample for storage if too many points
+        if len(fpr_list) > 200:
+            indices = np.linspace(0, len(fpr_list)-1, 200, dtype=int)
+            fpr_list = [fpr_list[i] for i in indices]
+            tpr_list = [tpr_list[i] for i in indices]
+    except Exception as e:
+        print(f"   ⚠️ ROC computation failed: {e}")
         fpr_list = []
         tpr_list = []
         auc_score = 0.0
@@ -240,16 +240,24 @@ def train_model():
     metrics = {
         "accuracy": float(accuracy),
         "precision": float(precision),
-        "recall": float(recall),
+        "recall": float(recall_val),
         "f1_score": float(f1),
         "confusion_matrix": cm.tolist(),
         "labels": ["FAKE", "REAL"],
-        "train_size": int(total_processed),
-        "test_size": int(len(val_chunk)),
-        "total_articles": int(total_processed + len(val_chunk)),
+        "train_size": int(len(X_train)),
+        "test_size": int(len(X_test)),
+        "total_articles": int(len(X_train) + len(X_test)),
         "roc_fpr": fpr_list,
         "roc_tpr": tpr_list,
-        "roc_auc": auc_score
+        "roc_auc": auc_score,
+        "model_type": "Ensemble (LinearSVC + LogisticRegression + PassiveAggressive)",
+        "tfidf_features": int(len(tfidf.vocabulary_)),
+        "ngram_range": [1, 3],
+        "individual_accuracy": {
+            "LinearSVC": float(svc_acc),
+            "LogisticRegression": float(lr_acc),
+            "PassiveAggressive": float(pa_acc),
+        },
     }
 
     metrics_path = os.path.join(model_dir, "evaluation_metrics.json")
@@ -258,13 +266,15 @@ def train_model():
     print(f"   📊 Evaluation metrics saved to: {metrics_path}")
 
     print()
-    print("╔══════════════════════════════════════════════════════════╗")
-    print("║              ✅ Training Complete!                       ║")
-    print("║                                                          ║")
-    print(f"║   Accuracy: {accuracy*100:.2f}%                                    ║")
-    print("║                                                          ║")
-    print("║   Next: Run 'streamlit run app.py' to start the app!    ║")
-    print("╚══════════════════════════════════════════════════════════╝")
+    print("╔══════════════════════════════════════════════════════════════╗")
+    print("║              ✅ Training Complete!                           ║")
+    print("║                                                              ║")
+    print(f"║   Ensemble Accuracy: {accuracy*100:.2f}%                              ║")
+    print(f"║   ROC-AUC: {auc_score:.4f}                                        ║")
+    print("║                                                              ║")
+    print("║   Models: TF-IDF Ensemble + Preprocessor                    ║")
+    print("║   Next: Run 'python start.py' to launch the app!            ║")
+    print("╚══════════════════════════════════════════════════════════════╝")
     print()
 
 

@@ -145,39 +145,30 @@ def fetch_and_update_model():
     except Exception as e:
         print(f"⚠️ Failed to save new claims to news.csv: {e}")
 
-    # 4. Load the existing model pipeline for incremental training
-    if not os.path.exists(MODEL_PATH):
-        print(f"❌ Model file not found at: {MODEL_PATH}")
-        print("   Please run 'python train_model.py' to train the initial model first.")
-        return
-        
-    print("📂 Loading model weights...")
-    pipeline = joblib.load(MODEL_PATH)
-    
-    # Extract components from pipeline
-    tfidf = pipeline.named_steps['tfidf']
-    classifier = pipeline.named_steps['classifier']
-    
-    # Load preprocessor to clean raw text
-    if os.path.exists(PREPROCESSOR_PATH):
-        preprocessor = joblib.load(PREPROCESSOR_PATH)
-        cleaned_texts = [preprocessor.preprocess_for_model(t) for t in unique_texts]
-    else:
-        cleaned_texts = unique_texts
-        
-    # Transform new data using existing TF-IDF vocab
-    X_new = tfidf.transform(cleaned_texts)
-    y_new = unique_labels
-    
-    # Run incremental partial fit
-    print("🧠 Incrementally training the classifier...")
+    # 4. Retrain the model pipeline (scikit-learn training is extremely fast, ensuring full ensemble calibration)
+    print("🧠 Retraining the ensemble classifier with new data...")
     try:
-        classifier.partial_fit(X_new, y_new, classes=['FAKE', 'REAL'])
-        joblib.dump(pipeline, MODEL_PATH)
-        print("💾 Model weights successfully updated in real-time!")
-        
+        from scripts.train_model import train_model
+        train_model()
+        print("💾 Model successfully retrained and updated in real-time!")
     except Exception as e:
-        print(f"❌ Failed to incrementally train model: {e}")
+        print(f"❌ Failed to retrain model: {e}")
+
+    # 5. Log monitoring statistics to SQLite database
+    import sqlite3
+    try:
+        db_path = os.path.join(PROJECT_ROOT, "data", "truthshield.db")
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO monitoring_log (claims_fetched, claims_new, source) VALUES (?, ?, ?)",
+            (len(all_claims), len(unique_texts), "Google Fact Check API")
+        )
+        conn.commit()
+        conn.close()
+        print("📊 Logged monitoring statistics to truthshield.db")
+    except Exception as e:
+        print(f"⚠️ Failed to log monitoring stats: {e}")
 
 def main():
     import socket

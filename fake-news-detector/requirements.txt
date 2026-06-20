@@ -20,3 +20,7 @@ spacy>=3.7
 fastapi>=0.104
 uvicorn>=0.24
 feedparser>=6.0
+wikipedia-api>=0.7
+textstat>=0.7
+torch>=2.0
+transformers>=4.36

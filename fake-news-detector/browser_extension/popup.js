@@ -1,87 +1,216 @@
-document.addEventListener('DOMContentLoaded', () => {
-  const textInput = document.getElementById('textInput');
-  const verifyBtn = document.getElementById('verifyBtn');
-  const resultBox = document.getElementById('resultBox');
-  const verdictDiv = document.getElementById('verdict');
-  const confidenceDiv = document.getElementById('confidence');
-  const summaryDiv = document.getElementById('summary');
+// TruthShield Popup Script
+// Tries /analyze endpoint first, falls back to /predict-json
 
-  // Check if there is text from the context menu selection
-  chrome.storage.local.get('selectedTextForVerify', (data) => {
-    if (data.selectedTextForVerify) {
-      textInput.value = data.selectedTextForVerify;
-      // Clear selection storage
-      chrome.storage.local.remove('selectedTextForVerify');
+(function () {
+  'use strict';
+
+  const API_BASE = 'http://localhost:8000';
+
+  const newsTextEl = document.getElementById('newsText');
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const statusMsg = document.getElementById('statusMsg');
+  const resultsArea = document.getElementById('resultsArea');
+
+  // ── Initialization ──────────────────────────────────────────────
+
+  // Check chrome.storage for text selected via context menu
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.get('selectedTextForVerify', (data) => {
+      if (data.selectedTextForVerify) {
+        newsTextEl.value = data.selectedTextForVerify;
+        chrome.storage.local.remove('selectedTextForVerify');
+        // Auto-analyze if text was injected from context menu
+        runAnalysis();
+      }
+    });
+  }
+
+  analyzeBtn.addEventListener('click', runAnalysis);
+
+  // Allow Ctrl+Enter to submit
+  newsTextEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      runAnalysis();
     }
   });
 
-  // Verify button click listener
-  verifyBtn.addEventListener('click', async () => {
-    const text = textInput.value.trim();
-    if (text.length < 20) {
-      alert('Please select or paste at least 20 characters of text.');
+  // ── Analysis Logic ──────────────────────────────────────────────
+
+  async function runAnalysis() {
+    const text = newsTextEl.value.trim();
+    if (!text) {
+      showStatus('Please paste article text or a URL to analyze.', true);
       return;
     }
 
-    verifyBtn.innerText = 'Analyzing...';
-    verifyBtn.disabled = true;
+    showStatus('Analyzing article...', false);
+    analyzeBtn.disabled = true;
+    resultsArea.classList.remove('visible');
 
+    let result = null;
+
+    // 1. Try the full /analyze endpoint
     try {
-      // Send API request to the local API server
-      const response = await fetch('http://localhost:8000/predict-json', {
+      const resp = await fetch(`${API_BASE}/analyze`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ text: text })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text.substring(0, 10000), url: '' }),
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.error) {
-          runMockAnalysis(text);
-        } else {
-          renderResult(data.prediction, data.confidence, data.summary);
-        }
-      } else {
-        // Fallback demo results if server API endpoint is not running
-        runMockAnalysis(text);
+      if (resp.ok) {
+        result = await resp.json();
       }
-    } catch (err) {
-      // Fallback demo results if connection fails
-      console.log('API connection failed, using mock analysis. Make sure the API server is running on port 8000');
-      runMockAnalysis(text);
+    } catch (_) {
+      // Will fall through to fallback
     }
-  });
 
-  function renderResult(prediction, confidence, summary) {
-    resultBox.style.display = 'block';
-    verdictDiv.innerText = prediction.toUpperCase();
-    verdictDiv.className = `verdict-badge ${prediction.toLowerCase()}`;
-    confidenceDiv.innerHTML = `<b>Confidence Score:</b> ${(confidence * 100).toFixed(1)}%`;
-    summaryDiv.innerHTML = `<b>Brief Summary:</b><br/>${summary || 'No summary available.'}`;
-    verifyBtn.innerText = 'Analyze Text';
-    verifyBtn.disabled = false;
+    // 2. Fallback to /predict-json
+    if (!result) {
+      try {
+        const resp = await fetch(`${API_BASE}/predict-json`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: text.substring(0, 10000) }),
+        });
+        if (resp.ok) {
+          result = await resp.json();
+        }
+      } catch (_) {
+        // Will show error below
+      }
+    }
+
+    analyzeBtn.disabled = false;
+
+    if (!result) {
+      showStatus('Could not reach TruthShield API. Make sure the server is running on localhost:8000.', true);
+      return;
+    }
+
+    hideStatus();
+    renderResults(result);
   }
 
-  function runMockAnalysis(text) {
-    // Basic heuristics for demo/offline mock response
-    const words = text.toLowerCase().split(/\s+/);
-    const suspiciousWords = ['fake', 'conspiracy', 'shocking', 'unbelievable', 'secret', 'scam', 'liar', 'expose', 'miracle'];
-    let suspiciousCount = 0;
-    
-    words.forEach(w => {
-      if (suspiciousWords.includes(w)) suspiciousCount++;
-    });
+  // ── Rendering ───────────────────────────────────────────────────
 
-    const probFake = Math.min(0.2 + (suspiciousCount * 0.15) + (Math.random() * 0.15), 0.95);
-    const prediction = probFake >= 0.5 ? 'FAKE' : 'REAL';
-    const confidence = prediction === 'FAKE' ? probFake : (1.0 - probFake);
-    
-    // Simple summary extraction
-    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-    const summary = sentences.slice(0, 2).join(' ');
+  function renderResults(r) {
+    resultsArea.classList.add('visible');
 
-    renderResult(prediction, confidence, summary);
+    const prediction = r.prediction || 'UNKNOWN';
+    const category = r.category || prediction;
+    const credibility = r.credibility !== undefined ? Math.round(r.credibility * 100) : null;
+    const confidence = r.confidence !== undefined ? Math.round(r.confidence * 100) : null;
+
+    // Category badge
+    const badgeEl = document.getElementById('categoryBadge');
+    badgeEl.textContent = category;
+    badgeEl.className = 'category-badge category-' + mapCategory(category);
+
+    // Credibility score
+    const credEl = document.getElementById('credibilityScore');
+    if (credibility !== null) {
+      credEl.textContent = credibility + '%';
+      credEl.style.color = scoreColor(credibility);
+    } else {
+      credEl.textContent = '—';
+    }
+
+    // Confidence score card
+    const confEl = document.getElementById('confidenceScore');
+    confEl.textContent = confidence !== null ? confidence + '%' : '—';
+
+    // Confidence bar
+    if (confidence !== null) {
+      document.getElementById('confidenceBarValue').textContent = confidence + '%';
+      document.getElementById('confidenceBarFill').style.width = confidence + '%';
+    }
+
+    // Source trust
+    const stIndicator = document.getElementById('sourceTrustIndicator');
+    if (r.source_trust !== undefined && r.source_trust !== null) {
+      const st = Math.round(r.source_trust);
+      stIndicator.style.display = 'block';
+      document.getElementById('sourceTrustValue').textContent = st + '%';
+      document.getElementById('sourceTrustFill').style.width = st + '%';
+    } else {
+      stIndicator.style.display = 'none';
+    }
+
+    // Clickbait score
+    const cbIndicator = document.getElementById('clickbaitIndicator');
+    if (r.clickbait_score !== undefined && r.clickbait_score !== null) {
+      const cb = Math.round(r.clickbait_score * 100);
+      cbIndicator.style.display = 'block';
+      document.getElementById('clickbaitValue').textContent = cb + '%';
+      document.getElementById('clickbaitFill').style.width = cb + '%';
+    } else {
+      cbIndicator.style.display = 'none';
+    }
+
+    // AI-generated score
+    const aiIndicator = document.getElementById('aiScoreIndicator');
+    if (r.ai_score !== undefined && r.ai_score !== null) {
+      const ai = Math.round(r.ai_score * 100);
+      aiIndicator.style.display = 'block';
+      document.getElementById('aiScoreValue').textContent = ai + '%';
+      document.getElementById('aiScoreFill').style.width = ai + '%';
+    } else {
+      aiIndicator.style.display = 'none';
+    }
+
+    // Verification results
+    const vSection = document.getElementById('verificationSection');
+    const vList = document.getElementById('verificationList');
+    if (r.verification_results && r.verification_results.length > 0) {
+      vSection.style.display = 'block';
+      vList.innerHTML = r.verification_results.slice(0, 5).map((v) => {
+        const claimText = v.claim_text || v.claim || 'Claim';
+        const rating = v.rating || 'Unknown';
+        const ratingClass = getRatingClass(rating);
+        return `<div class="verification-item">• ${escapeHtml(claimText)}: <span class="${ratingClass}">${escapeHtml(rating)}</span></div>`;
+      }).join('');
+    } else {
+      vSection.style.display = 'none';
+      vList.innerHTML = '';
+    }
   }
-});
+
+  // ── Helpers ─────────────────────────────────────────────────────
+
+  function mapCategory(cat) {
+    const upper = (cat || '').toUpperCase();
+    if (['REAL', 'TRUE', 'CREDIBLE', 'VERIFIED'].includes(upper)) return 'REAL';
+    if (['FAKE', 'FALSE', 'FABRICATED'].includes(upper)) return 'FAKE';
+    if (['SATIRE', 'PARODY'].includes(upper)) return 'SATIRE';
+    if (['CLICKBAIT'].includes(upper)) return 'CLICKBAIT';
+    if (['MISLEADING', 'BIASED', 'PARTIALLY FALSE'].includes(upper)) return 'MISLEADING';
+    return 'UNKNOWN';
+  }
+
+  function scoreColor(val) {
+    if (val >= 70) return '#10b981';
+    if (val >= 40) return '#f59e0b';
+    return '#ef4444';
+  }
+
+  function getRatingClass(rating) {
+    const r = (rating || '').toLowerCase();
+    if (r === 'true' || r === 'verified' || r === 'correct') return 'rating-true';
+    if (r === 'false' || r === 'fabricated' || r === 'incorrect') return 'rating-false';
+    return 'rating-mixed';
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function showStatus(msg, isError) {
+    statusMsg.textContent = msg;
+    statusMsg.className = 'status visible' + (isError ? ' error' : '');
+  }
+
+  function hideStatus() {
+    statusMsg.className = 'status';
+  }
+})();

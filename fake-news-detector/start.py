@@ -40,16 +40,20 @@ def log(tag, color, msg):
 
 
 def check_model():
-    """Check if the trained model exists."""
+    """Check if the trained model exists, and train it automatically if missing."""
     model_path = os.path.join(PROJECT_ROOT, "model", "fake_news_model.pkl")
     if not os.path.exists(model_path):
-        log("WARNING", YELLOW,
-            "No trained model found at model/fake_news_model.pkl")
-        log("WARNING", YELLOW,
-            "Run 'python scripts/train_model.py' first to train the model.")
-        log("WARNING", YELLOW,
-            "Starting anyway — the app will work in limited mode.\n")
-        return False
+        log("TRAINING", YELLOW, "No trained model found. Automatically training ensemble model...")
+        py_exec = get_python_executable()
+        try:
+            # Run the training script synchronously and wait for it to complete
+            subprocess.run([py_exec, os.path.join("scripts", "train_model.py")], check=True)
+            log("TRAINING", GREEN, "Model training completed successfully! ✓")
+            return True
+        except Exception as e:
+            log("ERROR", RED, f"Failed to automatically train model: {e}")
+            log("WARNING", YELLOW, "Starting anyway — the app will work in limited mode.\n")
+            return False
     log("MODEL", GREEN, "Trained model found ✓")
     return True
 

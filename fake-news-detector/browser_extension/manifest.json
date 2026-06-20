@@ -1,17 +1,23 @@
 {
   "manifest_version": 3,
   "name": "TruthShield Credibility Checker",
-  "version": "1.0",
-  "description": "Verify the credibility of any news article or web page text instantly.",
-  "permissions": [
-    "activeTab",
-    "contextMenus"
+  "version": "2.0",
+  "description": "Real-time article credibility analysis powered by TruthShield AI — auto-scans news articles and shows authenticity ratings",
+  "permissions": ["activeTab", "contextMenus", "storage"],
+  "host_permissions": ["http://localhost:8000/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_icon": "icon.png"
+    "default_title": "TruthShield Credibility Checker"
   },
-  "background": {
-    "service_worker": "background.js"
-  }
+  "icons": {}
 }
