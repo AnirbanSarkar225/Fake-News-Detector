@@ -59,6 +59,28 @@ class TextPreprocessor:
             re.compile(r'\b[A-Z]{5,}\b'), # Case-sensitive: only matches actual ALL-CAPS words!
         ]
 
+        # Red-flag patterns: strong indicators of fabricated or misleading content
+        self.redflag_patterns = [
+            # Unverified / suppressed claims
+            re.compile(r'\b(?:not been peer[- ]?reviewed|has not been (?:verified|confirmed|published))\b', re.IGNORECASE),
+            re.compile(r'\b(?:tried to suppress|being suppressed|being hidden|cover[- ]?up)\b', re.IGNORECASE),
+            re.compile(r'\b(?:big pharma|pharmaceutical companies.*suppress|government.*(?:hiding|covering))\b', re.IGNORECASE),
+            # Extraordinary unverifiable claims
+            re.compile(r'\b(?:changes everything|left.*in (?:disbelief|shock)|revolutionize)\b', re.IGNORECASE),
+            re.compile(r'\b(?:cure[sd]? (?:all|every|any)|eliminat(?:e|es|ed) the need for (?:all|every))\b', re.IGNORECASE),
+            re.compile(r'\b(?:grants? (?:complete|total|full) (?:immunity|protection))\b', re.IGNORECASE),
+            re.compile(r'\b(?:previously unknown|hidden (?:deep|inside|within))\b', re.IGNORECASE),
+            re.compile(r'\b(?:destroy(?:s|ed)? all|kills? all|eliminat(?:e|es) all)\b', re.IGNORECASE),
+            # Vague attribution with extraordinary claims
+            re.compile(r'\b(?:reportedly|allegedly|some claim|it is rumored|anonymous.*report)\b', re.IGNORECASE),
+            re.compile(r'\b(?:no other.*(?:team|group|scientist).*(?:verify|confirm|replicate))\b', re.IGNORECASE),
+            re.compile(r'\b(?:declined to comment|refused to (?:comment|confirm|deny))\b', re.IGNORECASE),
+            # Pseudoscience signals
+            re.compile(r'\b(?:ancient (?:remedy|secret|wisdom)|special diet|rare (?:herb|plant|crystal))\b', re.IGNORECASE),
+            re.compile(r'\b(?:quantum (?:healing|energy)|free energy|unlimited (?:energy|electricity|power))\b', re.IGNORECASE),
+            re.compile(r'\b(?:scientists? (?:baffled|stunned|can\'t explain)|doctors? (?:hate|don\'t want))\b', re.IGNORECASE),
+        ]
+
         self.credibility_patterns = [
             # ── Attribution & sourcing (multi-word phrases only) ──
             re.compile(r'\b(?:according to|study finds|research shows|data suggests)\b', re.IGNORECASE),
@@ -90,6 +112,16 @@ class TextPreprocessor:
             re.compile(r'\b(?:PTI|ANI|PIB|Doordarshan|All India Radio|Prasar Bharati)\b', re.IGNORECASE),
             re.compile(r'\b(?:crore|lakh)\b', re.IGNORECASE),
             re.compile(r'\b(?:Aadhaar|UPI|GST|NEET|JEE|UPSC)\b', re.IGNORECASE),
+
+            # ── Fact-checking & debunking signals (boost credibility) ──
+            re.compile(r'\b(?:fact[\s-]?check(?:ed|ing|ers?|s)?)\b', re.IGNORECASE),
+            re.compile(r'\b(?:debunk(?:ed|ing|s)?|disproved?|refut(?:ed|ing|es?))\b', re.IGNORECASE),
+            re.compile(r'\b(?:false claim|fake claim|misleading claim|baseless claim)\b', re.IGNORECASE),
+            re.compile(r'\b(?:no evidence|no proof|lacks evidence|no credible evidence)\b', re.IGNORECASE),
+            re.compile(r'\b(?:experts say|scientists say|researchers say|doctors say)\b', re.IGNORECASE),
+            re.compile(r'\b(?:investigation found|investigation reveals?|investigation shows?)\b', re.IGNORECASE),
+            re.compile(r'\b(?:snopes|politifact|factcheck\.org|full fact|alt news|boom live)\b', re.IGNORECASE),
+            re.compile(r'\b(?:rated (?:as )?(?:false|mostly false|misleading|unproven))\b', re.IGNORECASE),
         ]
 
     def clean_text(self, text: str) -> str:
@@ -294,6 +326,15 @@ class TextPreprocessor:
         results['exclamation_count'] = text.count('!')
         results['question_count'] = text.count('?')
 
+        # ── Red-flag pattern matching ──
+        redflags = []
+        for pattern in self.redflag_patterns:
+            matches = pattern.findall(text)
+            if matches:
+                redflags.extend([m if isinstance(m, str) else m[0] for m in matches if m])
+        results['redflags'] = redflags
+        results['redflag_count'] = len(redflags)
+
         word_count = max(len(text.split()), 1)
 
         sensational_density = len(results['suspicious_patterns']) / word_count
@@ -308,17 +349,27 @@ class TextPreprocessor:
         if results['exclamation_count'] > 3:
             results['sensationalism_score'] = min(results['sensationalism_score'] + 0.1, 1.0)
 
+        # ── Red-flag penalty: each red flag strongly increases sensationalism ──
+        if results['redflag_count'] > 0:
+            redflag_penalty = min(results['redflag_count'] * 0.15, 0.6)
+            results['sensationalism_score'] = min(results['sensationalism_score'] + redflag_penalty, 1.0)
+            # Red flags also diminish credibility — name-dropping institutions
+            # doesn't help when you also say "not peer-reviewed" and "suppress"
+            results['credibility_score'] = max(0.0, results['credibility_score'] - redflag_penalty * 1.2)
+
         # ── Formal writing style bonus ──
         # Neutral tone: low exclamation usage + no ALL-CAPS shouting = credible writing
-        if results['exclamation_count'] == 0 and results['caps_ratio'] < 0.12:
-            results['credibility_score'] = min(results['credibility_score'] + 0.15, 1.0)
-        # Proper sentence structure (avg sentence length > 12 words)
-        sentences = text.split('.')
-        real_sentences = [s.strip() for s in sentences if len(s.strip().split()) > 3]
-        if real_sentences:
-            avg_sent_len = sum(len(s.split()) for s in real_sentences) / len(real_sentences)
-            if avg_sent_len > 12:
-                results['credibility_score'] = min(results['credibility_score'] + 0.1, 1.0)
+        # ONLY apply style bonuses if there are no major red flags!
+        if results['redflag_count'] == 0:
+            if results['exclamation_count'] == 0 and results['caps_ratio'] < 0.12:
+                results['credibility_score'] = min(results['credibility_score'] + 0.15, 1.0)
+            # Proper sentence structure (avg sentence length > 12 words)
+            sentences = text.split('.')
+            real_sentences = [s.strip() for s in sentences if len(s.strip().split()) > 3]
+            if real_sentences:
+                avg_sent_len = sum(len(s.split()) for s in real_sentences) / len(real_sentences)
+                if avg_sent_len > 12:
+                    results['credibility_score'] = min(results['credibility_score'] + 0.1, 1.0)
 
         return results
 

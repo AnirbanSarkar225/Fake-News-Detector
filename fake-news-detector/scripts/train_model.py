@@ -1,8 +1,8 @@
 """
 Model Training Script for Fake News Detector.
 
-Trains an Ensemble (LinearSVC + LogisticRegression + PassiveAggressive) pipeline
-with TF-IDF (50k features, trigrams) for robust fake news classification.
+Trains an Ensemble (LinearSVC + LogisticRegression + PassiveAggressive + ExtraTrees) pipeline
+with TF-IDF (75k features, trigrams) for robust fake news classification.
 
 Ensemble uses soft voting via CalibratedClassifierCV for probability calibration.
 """
@@ -51,8 +51,8 @@ def train_model():
     print()
     print("╔══════════════════════════════════════════════════════════════╗")
     print("║   🛡️  TruthShield — Production Ensemble Training            ║")
-    print("║   LinearSVC + LogisticRegression + PassiveAggressive        ║")
-    print("║   TF-IDF: 50k features, (1,2) n-grams                      ║")
+    print("║   LinearSVC + LogisticRegression + PA + ExtraTrees          ║")
+    print("║   TF-IDF: 75k features, (1,3) n-grams                      ║")
     print("╚══════════════════════════════════════════════════════════════╝")
     print()
 
@@ -155,12 +155,12 @@ def train_model():
     gc.collect()
 
     # ── Step 4: TF-IDF Vectorization ──────────────────────────────
-    print("\n📐 Step 4/6: Fitting TF-IDF Vectorizer (50k features, bigrams)...")
+    print("\n📐 Step 4/6: Fitting TF-IDF Vectorizer (75k features, trigrams)...")
     tfidf = TfidfVectorizer(
-        max_features=50000,
-        ngram_range=(1, 2),  # Use bigrams to prevent memory exhaustion
-        max_df=0.95,
-        min_df=5,            # Filter out rare combinations early
+        max_features=75000,
+        ngram_range=(1, 3),  # Trigrams for better context
+        max_df=0.90,
+        min_df=3,            # Allow rarer but discriminative terms
         sublinear_tf=True,
     )
     X_train_tfidf = tfidf.fit_transform(X_train)
@@ -181,13 +181,13 @@ def train_model():
     
     ensemble = VotingClassifier(
         estimators=[
-            ('svc', CalibratedClassifierCV(LinearSVC(C=1.0, max_iter=5000, random_state=42), cv=3, method='sigmoid')),
-            ('lr', LogisticRegression(C=1.0, max_iter=1000, random_state=42, solver='lbfgs')),
-            ('pa', CalibratedClassifierCV(PassiveAggressiveClassifier(C=0.5, max_iter=100, random_state=42), cv=3, method='sigmoid')),
-            ('et', CalibratedClassifierCV(ExtraTreesClassifier(n_estimators=100, max_depth=15, random_state=42, n_jobs=-1), cv=3, method='sigmoid')),
+            ('svc', CalibratedClassifierCV(LinearSVC(C=1.0, max_iter=5000, random_state=42, verbose=1), cv=3, method='sigmoid')),
+            ('lr', LogisticRegression(C=1.0, max_iter=1000, random_state=42, solver='lbfgs', verbose=1)),
+            ('pa', CalibratedClassifierCV(PassiveAggressiveClassifier(C=1.0, max_iter=500, random_state=42, verbose=1), cv=3, method='sigmoid')),
+            ('et', ExtraTreesClassifier(n_estimators=100, max_depth=25, random_state=42, n_jobs=-1, verbose=1)),
         ],
         voting='soft',
-        weights=[2, 1, 1, 1],  # Weight SVC higher — best generalization
+        weights=[3, 2, 2, 1],  # Rebalanced weights for optimal ensemble accuracy
     )
     ensemble.fit(X_train_tfidf, y_train)
 

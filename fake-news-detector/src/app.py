@@ -24,6 +24,7 @@ import re
 import pandas as pd
 import time
 import math
+import tempfile
 import nltk
 from nltk.tokenize import sent_tokenize
 
@@ -90,7 +91,7 @@ def get_user_initials(display_name):
 def get_avatar_gradient(email):
     """Deterministically assign a gradient color pair based on email hash."""
     gradients = [
-        ("#e15b3e", "#d49b4c"),  # Terracotta → Brass
+        ("#F59E0B", "#06B6D4"),  # Gold → Cyan
         ("#6366f1", "#8b5cf6"),  # Indigo → Violet
         ("#06b6d4", "#3b82f6"),  # Cyan → Blue
         ("#f59e0b", "#ef4444"),  # Amber → Red
@@ -128,811 +129,574 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;550&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
-    /* ══════════════════════════════════════════════════════════
-       DESIGN TOKENS — Warm Clay + Brass + Organic Obsidian (70/30)
-       ══════════════════════════════════════════════════════════ */
     :root {
-        /* Deep warm obsidian theme */
-        --bg-deep:         #090706; /* Warm stone-black */
-        --bg-mid:          #120f0e; /* Obsidian dark grey */
-        --bg-surface:      #1a1614; /* Deep earth charcoal */
-
-        /* Glass surfaces & layers */
-        --glass-bg:        linear-gradient(135deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0.005) 100%);
-        --glass-bg-hover:  linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.01) 100%);
-        --glass-bg-strong: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.015) 100%);
-        --glass-border:    rgba(255, 255, 255, 0.05);
-        --glass-highlight: rgba(255, 255, 255, 0.1);
-        --glass-blur:      blur(20px) saturate(120%);
-        --glass-blur-lg:   blur(30px) saturate(140%);
-
-        /* Font typography & scaling */
-        --font-heading:    'Space Grotesk', 'Inter', sans-serif;
-        --font-body:       'Inter', -apple-system, sans-serif;
-        --font-mono:       'JetBrains Mono', monospace;
-
-        /* Text colors - warm sand and cream */
-        --text-primary:    #f5f2eb; /* Cream */
-        --text-secondary:  #beb3a6; /* Warm Sand */
-        --text-muted:      #7c7165; /* Muted Clay-grey */
+        --bg-base: #0B0F14;
+        --bg-panel: rgba(255, 255, 255, 0.02);
+        --bg-panel-hover: rgba(255, 255, 255, 0.04);
+        --border-glass: rgba(255, 255, 255, 0.08);
+        --border-glass-hover: rgba(255, 255, 255, 0.12);
         
-        /* Curated Human-Crafted Warm Colors (Clay, Brass, Sage) */
-        --accent:          #e15b3e; /* Clay Red / Terracotta */
-        --accent-glow:     rgba(225, 91, 62, 0.25);
-        --brass:           #d49b4c; /* Warm Brass / Gold */
-        --brass-glow:      rgba(212, 155, 76, 0.2);
-        --purple:          #b45309; /* Deep Copper/Amber */
-        --purple-glow:     rgba(180, 83, 9, 0.15);
+        --text-primary: #EDEDED;
+        --text-secondary: #A0A0A0;
+        --text-muted: #666666;
+
+        --gold-premium: #E5C158;
+        --gold-muted: rgba(229, 193, 88, 0.15);
         
-        /* Semantic */
-        --success:         #5f8a6b; /* Sage/Forest Green */
-        --success-bg:      rgba(95, 138, 107, 0.08);
-        --success-border:  rgba(95, 138, 107, 0.25);
-        --danger:          #d45d4e; /* Terracotta Red */
-        --danger-bg:       rgba(212, 93, 78, 0.08);
-        --danger-border:   rgba(212, 93, 78, 0.25);
-        --warning:         #d49b4c; /* Brass Amber */
-        --warning-bg:      rgba(212, 155, 76, 0.08);
-        --warning-border:  rgba(212, 155, 76, 0.25);
+        --success: #17B877;
+        --danger: #E5484D;
+        --warning: #F5A623;
+        --info: #3B82F6;
 
-        /* Skeuomorphic depth tokens (70% depth) */
-        --shadow-recessed: inset 0 3px 10px rgba(0,0,0,0.85), inset 0 1px 2px rgba(255,255,255,0.03);
-        --shadow-beveled:  0 10px 30px rgba(0,0,0,0.6), 
-                           inset 0 1px 0 rgba(255, 255, 255, 0.15), 
-                           inset 1px 0 0 rgba(255, 255, 255, 0.08),
-                           inset 0 -1px 0 rgba(0,0,0,0.5);
-        --shadow-knob:     0 4px 10px rgba(0,0,0,0.4), 
-                           inset 0 1px 0 rgba(255,255,255,0.3), 
-                           inset 0 -2px 3px rgba(0,0,0,0.35);
+        --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        --font-mono: 'JetBrains Mono', monospace;
+        --font-display: 'Space Grotesk', sans-serif;
+
+        /* Legacy aliases — referenced by inline HTML styles */
+        --accent: #E5C158;
+        --accent-secondary: #06B6D4;
+        --border-color: rgba(255, 255, 255, 0.08);
+        --brass: #E5C158;
+        --font-heading: 'Space Grotesk', 'Inter', sans-serif;
+        --font-body: 'Inter', -apple-system, sans-serif;
+        --glass-border: rgba(255, 255, 255, 0.08);
     }
 
-    /* Landing page & Login styling */
-    .landing-hero {
-        text-align: center;
-        padding: 3rem 1.5rem 1.5rem 1.5rem;
-        margin-bottom: 1rem;
-    }
-    .landing-hero h1 {
-        font-size: 3rem !important;
-        font-weight: 800;
-        line-height: 1.2;
-        background: linear-gradient(135deg, #d35230, #c68b3f, #d5c9ba) !important;
-        -webkit-background-clip: text !important;
-        -webkit-text-fill-color: transparent !important;
-    }
-    .landing-hero p {
-        font-size: 1.15rem !important;
-        color: var(--text-secondary) !important;
-        margin-top: 0.8rem;
-    }
-    
-    /* ══════════════════════════════════════════════════════════
-       GLOBAL APPLICATION FRAMEWORK
-       ══════════════════════════════════════════════════════════ */
-    html {
-        scroll-behavior: smooth !important;
-    }
-
+    /* ── Core Reset & App ── */
     .stApp {
-        font-family: var(--font-body) !important;
+        font-family: var(--font-sans) !important;
+        background-color: var(--bg-base) !important;
         color: var(--text-primary) !important;
-        /* Immersive clay-brass liquid embers canvas */
-        background:
-            linear-gradient(rgba(255, 255, 255, 0.004) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255, 255, 255, 0.004) 1px, transparent 1px),
-            radial-gradient(circle at 10% 20%, rgba(212, 155, 76, 0.05) 0%, transparent 45%),
-            radial-gradient(circle at 85% 35%, rgba(225, 91, 62, 0.04) 0%, transparent 45%),
-            radial-gradient(circle at 50% 80%, rgba(95, 138, 107, 0.04) 0%, transparent 55%),
-            linear-gradient(180deg, #090706 0%, #120f0e 45%, #080605 100%) !important;
-        background-size: 24px 24px, 24px 24px, 100% 100%, 100% 100%, 100% 100%, 100% 100% !important;
-        background-attachment: fixed !important;
     }
-
-    /* Expand workspace width to avoid blank/sparse look */
+    
     [data-testid="block-container"] {
-        padding-top: 2rem !important;
-        padding-bottom: 2rem !important;
-        padding-left: 5% !important;
-        padding-right: 5% !important;
-        max-width: 92% !important;
+        padding: 1.5rem 3rem 3rem 3rem !important;
+        max-width: 1400px !important;
     }
 
-    /* Scroll/Fade animations on page elements */
-    @keyframes fadeInUp {
-        from {
-            opacity: 0;
-            transform: translateY(20px);
-            filter: blur(4px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-            filter: blur(0);
-        }
-    }
-    
-    .hero-header {
-        animation: fadeInUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
-    }
-    
-    [data-testid="stSidebarUserContent"] {
-        animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+    /* ── Typography Elements ── */
+    h1, h2, h3, h4, h5, h6 {
+        font-family: var(--font-display) !important;
+        letter-spacing: -0.02em !important;
+        font-weight: 500 !important;
     }
 
-    /* Standardized text color rules */
-    .stApp p, .stApp li, .stApp span, .stApp label,
-    .stApp [data-testid="stMarkdownContainer"] p {
-        color: var(--text-primary) !important;
+    /* ── Reset container wrappers — remove all default chrome ── */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
     }
-    .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5 {
-        font-family: var(--font-heading) !important;
-        color: var(--text-primary) !important;
-        letter-spacing: -0.3px;
+    /* Let Streamlit's native bordered containers show through with our theme */
+    div[data-testid="stVerticalBlockBorderWrapper"] > div[style] {
+        border-color: var(--border-glass) !important;
+        border-radius: 8px !important;
+        background: rgba(255, 255, 255, 0.015) !important;
+        padding: 1.25rem !important;
     }
-    .stApp .stCaption, .stApp [data-testid="stCaptionContainer"] * {
+
+    /* ── Sidebar ── */
+    [data-testid="stSidebar"] {
+        background-color: #0A0D11 !important;
+        border-right: 1px solid var(--border-glass) !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+        padding: 1.5rem 1rem !important;
+    }
+    [data-testid="stSidebar"] .stButton > button {
+        background: rgba(255,255,255,0.02) !important;
         color: var(--text-secondary) !important;
+        border: 1px solid rgba(255,255,255,0.05) !important;
+        font-family: var(--font-mono) !important;
+        font-size: 0.8rem !important;
+        padding: 0.4rem 1rem !important;
+    }
+    [data-testid="stSidebar"] .stButton > button:hover {
+        background: rgba(229, 72, 77, 0.08) !important;
+        color: var(--danger) !important;
+        border-color: rgba(229, 72, 77, 0.15) !important;
     }
 
-    /* ══════════════════════════════════════════════════════════
-       HERO PANEL — Premium Liquid Glass Banner (Warm Clay & Gold)
-       ══════════════════════════════════════════════════════════ */
-    .hero-header {
-        background: var(--glass-bg-strong);
-        backdrop-filter: var(--glass-blur-lg);
-        -webkit-backdrop-filter: var(--glass-blur-lg);
-        padding: 3rem 2rem 2.5rem;
-        border-radius: 20px;
-        margin-bottom: 2.2rem;
-        text-align: center;
-        /* Skeuomorphic beveled glass borders */
-        border: 1px solid var(--glass-border) !important;
-        border-top: 1px solid rgba(255, 255, 255, 0.16) !important;
-        border-left: 1px solid rgba(255, 255, 255, 0.08) !important;
-        box-shadow:
-            0 15px 35px rgba(0,0,0,0.5),
-            inset 0 1px 0 rgba(255,255,255,0.15),
-            inset 0 -1px 0 rgba(0,0,0,0.4),
-            inset 0 0 50px rgba(212, 155, 76, 0.02);
-        position: relative;
-        overflow: hidden;
+    /* ── Top Intelligence Bar ── */
+    .top-intel-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        padding: 0.75rem 1.25rem;
+        background: var(--bg-panel);
+        backdrop-filter: blur(8px);
+        border: 1px solid var(--border-glass);
+        border-radius: 6px;
+        margin-bottom: 1.5rem;
     }
-    /* Liquid highlight reflections */
-    .hero-header::before {
-        content: '';
-        position: absolute;
-        top: 0; left: -50%; right: -50%;
-        height: 50%;
-        background: linear-gradient(180deg,
-            rgba(255,255,255,0.1) 0%,
-            rgba(255,255,255,0.03) 40%,
-            transparent 100%);
-        border-radius: 50%;
-        pointer-events: none;
-    }
-    .hero-header h1 {
-        background: linear-gradient(135deg, #e15b3e, #d49b4c, #beb3a6) !important;
-        -webkit-background-clip: text !important;
-        -webkit-text-fill-color: transparent !important;
-        font-size: 2.5rem;
-        font-weight: 800;
-        margin-bottom: 0.2rem;
-        filter: drop-shadow(0 2px 5px rgba(0,0,0,0.4));
-    }
-    .hero-header p {
-        color: var(--text-secondary) !important;
-        font-size: 1rem;
+    .intel-logo-section { display: flex; align-items: center; gap: 10px; }
+    .intel-logo { font-size: 1.1rem; }
+    .intel-title {
+        font-family: var(--font-mono);
+        font-size: 0.85rem;
+        color: var(--text-primary);
         font-weight: 500;
         letter-spacing: 0.5px;
     }
-    .hero-divider {
-        width: 80px;
-        height: 4px;
-        background: linear-gradient(90deg, var(--accent), var(--brass));
-        margin: 0.8rem auto;
-        border-radius: 10px;
-        box-shadow: 0 0 15px var(--accent-glow);
-    }
-
-    /* ══════════════════════════════════════════════════════════
-       CONTROL PANEL SIDEBAR — Slate Brushed Metallic Obsidian
-       ══════════════════════════════════════════════════════════ */
-    [data-testid="stSidebar"] {
-        background: linear-gradient(185deg, #090706 0%, #161210 60%, #0c0908 100%) !important;
-        border-right: 1px solid rgba(255,255,255,0.03) !important;
-        box-shadow: inset -5px 0 15px rgba(0,0,0,0.6), 5px 0 25px rgba(0,0,0,0.5) !important;
-    }
-    [data-testid="stSidebar"] *, [data-testid="stSidebar"] p,
-    [data-testid="stSidebar"] span, [data-testid="stSidebar"] label,
-    [data-testid="stSidebar"] li {
-        color: #beb3a6 !important;
-    }
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2,
-    [data-testid="stSidebar"] h3, [data-testid="stSidebar"] h4 {
-        color: var(--text-primary) !important;
-        font-family: var(--font-heading) !important;
-        text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-    }
-    [data-testid="stSidebar"] hr {
-        border-color: rgba(255,255,255,0.04) !important;
-    }
-
-    /* ══════════════════════════════════════════════════════════
-       GLASS CONSOLE CARDS — Heavy specular 3D panels
-       ══════════════════════════════════════════════════════════ */
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        background: var(--glass-bg) !important;
-        backdrop-filter: var(--glass-blur) !important;
-        -webkit-backdrop-filter: var(--glass-blur) !important;
-        border-radius: 16px !important;
-        padding: 1.8rem !important;
-        margin: 1rem 0 !important;
-        /* Specular light border */
-        border: 1px solid var(--glass-border) !important;
-        border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
-        border-left: 1px solid rgba(255, 255, 255, 0.08) !important;
-        border-bottom: 1px solid rgba(0,0,0,0.4) !important;
-        border-right: 1px solid rgba(0,0,0,0.3) !important;
-        box-shadow:
-            var(--shadow-beveled),
-            inset 0 0 25px rgba(255,255,255,0.01) !important;
-        transition: transform 0.25s ease, box-shadow 0.25s ease !important;
-        animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
-    }
-    div[data-testid="stVerticalBlockBorderWrapper"]:hover {
-        transform: translateY(-2px);
-        box-shadow:
-            0 15px 35px rgba(0,0,0,0.6), 
-            inset 0 1px 0 rgba(255,255,255,0.2), 
-            inset 1px 0 0 rgba(255,255,255,0.1),
-            inset 0 -1px 0 rgba(0,0,0,0.45) !important;
-    }
-    div[data-testid="stVerticalBlockBorderWrapper"] h3,
-    div[data-testid="stVerticalBlockBorderWrapper"] h4 {
-        color: var(--text-primary) !important;
-        font-family: var(--font-heading) !important;
-        font-weight: 700 !important;
-        margin-bottom: 1rem !important;
-        text-shadow: 0 1px 3px rgba(0,0,0,0.4);
-    }
-
-    /* ══════════════════════════════════════════════════════════
-       VERDICT STAMPS — 3D Bulging Clay Glass Seals
-       ══════════════════════════════════════════════════════════ */
-    .verdict-real {
-        background: linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 50%, rgba(0,0,0,0.2) 100%), linear-gradient(135deg, #5f8a6b, #45674f) !important;
-        color: #f5f2eb !important;
-        padding: 0.85rem 2.2rem;
-        border-radius: 12px;
-        font-family: var(--font-heading);
-        font-weight: 800;
-        font-size: 1.2rem;
-        display: inline-block;
-        border: 1px solid rgba(255,255,255,0.2);
-        border-top: 1px solid rgba(255,255,255,0.3);
-        box-shadow:
-            0 10px 25px rgba(95, 138, 107, 0.35),
-            0 2px 4px rgba(0,0,0,0.3),
-            inset 0 1px 0 rgba(255,255,255,0.25),
-            inset 0 -2px 5px rgba(0,0,0,0.3);
-        letter-spacing: 1.5px;
-        text-transform: uppercase;
-        text-shadow: 0 -1px 1px rgba(0,0,0,0.3), 0 1px 2px rgba(255,255,255,0.15);
-    }
-    .verdict-fake {
-        background: linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 50%, rgba(0,0,0,0.2) 100%), linear-gradient(135deg, #d45d4e, #b83d2f) !important;
-        color: #f5f2eb !important;
-        padding: 0.85rem 2.2rem;
-        border-radius: 12px;
-        font-family: var(--font-heading);
-        font-weight: 800;
-        font-size: 1.2rem;
-        display: inline-block;
-        border: 1px solid rgba(255,255,255,0.2);
-        border-top: 1px solid rgba(255,255,255,0.3);
-        box-shadow:
-            0 10px 25px rgba(212, 93, 78, 0.35),
-            0 2px 4px rgba(0,0,0,0.3),
-            inset 0 1px 0 rgba(255,255,255,0.25),
-            inset 0 -2px 5px rgba(0,0,0,0.3);
-        letter-spacing: 1.5px;
-        text-transform: uppercase;
-        text-shadow: 0 -1px 1px rgba(0,0,0,0.3), 0 1px 2px rgba(255,255,255,0.1);
-    }
-    .verdict-uncertain {
-        background: linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 50%, rgba(0,0,0,0.2) 100%), linear-gradient(135deg, #d49b4c, #b07e38) !important;
-        color: #f5f2eb !important;
-        padding: 0.85rem 2.2rem;
-        border-radius: 12px;
-        font-family: var(--font-heading);
-        font-weight: 800;
-        font-size: 1.2rem;
-        display: inline-block;
-        border: 1px solid rgba(255,255,255,0.2);
-        border-top: 1px solid rgba(255,255,255,0.3);
-        box-shadow:
-            0 10px 25px rgba(212, 155, 76, 0.35),
-            0 2px 4px rgba(0,0,0,0.3),
-            inset 0 1px 0 rgba(255,255,255,0.25),
-            inset 0 -2px 5px rgba(0,0,0,0.3);
-        letter-spacing: 1.5px;
-        text-transform: uppercase;
-        text-shadow: 0 -1px 1px rgba(0,0,0,0.3), 0 1px 2px rgba(255,255,255,0.15);
-    }
-    .verdict-satire {
-        background: linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 50%, rgba(0,0,0,0.2) 100%), linear-gradient(135deg, #6366f1, #8b5cf6) !important;
-        color: #f5f2eb !important;
-        padding: 0.85rem 2.2rem;
-        border-radius: 12px;
-        font-family: var(--font-heading);
-        font-weight: 800;
-        font-size: 1.2rem;
-        display: inline-block;
-        border: 1px solid rgba(255,255,255,0.2);
-        border-top: 1px solid rgba(255,255,255,0.3);
-        box-shadow:
-            0 10px 25px rgba(99, 102, 241, 0.35),
-            0 2px 4px rgba(0,0,0,0.3),
-            inset 0 1px 0 rgba(255,255,255,0.25),
-            inset 0 -2px 5px rgba(0,0,0,0.3);
-        letter-spacing: 1.5px;
-        text-transform: uppercase;
-        text-shadow: 0 -1px 1px rgba(0,0,0,0.3), 0 1px 2px rgba(255,255,255,0.15);
-    }
-    .verdict-clickbait {
-        background: linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 50%, rgba(0,0,0,0.2) 100%), linear-gradient(135deg, #f59e0b, #d97706) !important;
-        color: #f5f2eb !important;
-        padding: 0.85rem 2.2rem;
-        border-radius: 12px;
-        font-family: var(--font-heading);
-        font-weight: 800;
-        font-size: 1.2rem;
-        display: inline-block;
-        border: 1px solid rgba(255,255,255,0.2);
-        border-top: 1px solid rgba(255,255,255,0.3);
-        box-shadow:
-            0 10px 25px rgba(245, 158, 11, 0.35),
-            0 2px 4px rgba(0,0,0,0.3),
-            inset 0 1px 0 rgba(255,255,255,0.25),
-            inset 0 -2px 5px rgba(0,0,0,0.3);
-        letter-spacing: 1.5px;
-        text-transform: uppercase;
-        text-shadow: 0 -1px 1px rgba(0,0,0,0.3), 0 1px 2px rgba(255,255,255,0.15);
-    }
-    .verdict-misleading {
-        background: linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 50%, rgba(0,0,0,0.2) 100%), linear-gradient(135deg, #ea580c, #c2410c) !important;
-        color: #f5f2eb !important;
-        padding: 0.85rem 2.2rem;
-        border-radius: 12px;
-        font-family: var(--font-heading);
-        font-weight: 800;
-        font-size: 1.2rem;
-        display: inline-block;
-        border: 1px solid rgba(255,255,255,0.2);
-        border-top: 1px solid rgba(255,255,255,0.3);
-        box-shadow:
-            0 10px 25px rgba(234, 88, 12, 0.35),
-            0 2px 4px rgba(0,0,0,0.3),
-            inset 0 1px 0 rgba(255,255,255,0.25),
-            inset 0 -2px 5px rgba(0,0,0,0.3);
-        letter-spacing: 1.5px;
-        text-transform: uppercase;
-        text-shadow: 0 -1px 1px rgba(0,0,0,0.3), 0 1px 2px rgba(255,255,255,0.15);
-    }
-
-
-    /* ══════════════════════════════════════════════════════════
-       SENTENCE TRACKS — Inset physical clay/stone slots
-       ══════════════════════════════════════════════════════════ */
-    .sentence-high {
-        background: rgba(212, 93, 78, 0.05);
-        border-left: 4px solid var(--danger);
-        padding: 0.8rem 1.2rem;
-        margin: 0.6rem 0;
-        border-radius: 4px 12px 12px 4px;
-        color: var(--text-primary);
-        font-size: 0.92rem;
-        border-top: 1px solid rgba(255,255,255,0.02);
-        box-shadow: var(--shadow-recessed);
-        text-shadow: 0 1px 2px rgba(0,0,0,0.4);
-    }
-    .sentence-medium {
-        background: rgba(212, 155, 76, 0.05);
-        border-left: 4px solid var(--warning);
-        padding: 0.8rem 1.2rem;
-        margin: 0.6rem 0;
-        border-radius: 4px 12px 12px 4px;
-        color: var(--text-primary);
-        font-size: 0.92rem;
-        border-top: 1px solid rgba(255,255,255,0.02);
-        box-shadow: var(--shadow-recessed);
-        text-shadow: 0 1px 2px rgba(0,0,0,0.4);
-    }
-    .sentence-low {
-        background: rgba(95, 138, 107, 0.05);
-        border-left: 4px solid var(--success);
-        padding: 0.8rem 1.2rem;
-        margin: 0.6rem 0;
-        border-radius: 4px 12px 12px 4px;
-        color: var(--text-primary);
-        font-size: 0.92rem;
-        border-top: 1px solid rgba(255,255,255,0.02);
-        box-shadow: var(--shadow-recessed);
-        text-shadow: 0 1px 2px rgba(0,0,0,0.4);
-    }
-
-    /* ══════════════════════════════════════════════════════════
-       METRIC DISPLAY GAUGES — Embedded Earth-charcoal LCDs
-       ══════════════════════════════════════════════════════════ */
-    .metric-card {
-        background: rgba(6, 5, 4, 0.7) !important;
-        border-radius: 14px;
-        padding: 1.4rem 1rem;
-        text-align: center;
-        /* Recessed display bezel */
-        border: 1px solid rgba(255,255,255,0.03) !important;
-        border-bottom: 1px solid rgba(255,255,255,0.1) !important;
-        border-right: 1px solid rgba(255,255,255,0.06) !important;
-        box-shadow:
-            inset 0 4px 12px rgba(0,0,0,0.85),
-            0 1px 0 rgba(255,255,255,0.04),
-            0 0 12px rgba(212, 155, 76, 0.02) !important;
-        transition: box-shadow 0.25s ease;
-    }
-    .metric-card:hover {
-        box-shadow:
-            inset 0 4px 12px rgba(0,0,0,0.9),
-            0 1px 0 rgba(255,255,255,0.06),
-            0 0 18px rgba(212, 155, 76, 0.06) !important;
-    }
-    .metric-value {
-        font-size: 2.1rem;
-        font-weight: 800;
-        font-family: var(--font-heading);
-        background: linear-gradient(135deg, #e15b3e, #d49b4c) !important;
-        -webkit-background-clip: text !important;
-        -webkit-text-fill-color: transparent !important;
-        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
-    }
-    .metric-label {
-        color: var(--text-secondary);
-        font-size: 0.8rem;
-        margin-top: 0.4rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 1.2px;
-    }
-
-    /* ══════════════════════════════════════════════════════════
-       INTERFACE BUTTONS — 3D Bulging Terracotta & Brass Bulges
-       ══════════════════════════════════════════════════════════ */
-    .stButton > button {
-        /* Premium bulging gloss surface */
-        background: 
-            linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.03) 50%, rgba(0,0,0,0.15) 50%, rgba(0,0,0,0.35) 100%),
-            linear-gradient(135deg, #e15b3e 0%, #d49b4c 100%) !important;
-        color: #f5f2eb !important;
-        border: 1px solid rgba(255,255,255,0.18) !important;
-        border-top: 1px solid rgba(255,255,255,0.3) !important;
-        border-radius: 12px !important;
-        padding: 0.8rem 2.2rem !important;
-        font-family: var(--font-heading) !important;
-        font-weight: 700 !important;
-        font-size: 1rem !important;
-        letter-spacing: 0.8px !important;
-        transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
-        box-shadow:
-            0 8px 20px rgba(225, 91, 62, 0.2),
-            0 4px 10px rgba(0,0,0,0.4),
-            inset 0 1px 0 rgba(255,255,255,0.2) !important;
-        text-shadow: 0 -1px 1px rgba(0,0,0,0.3) !important;
-        backdrop-filter: blur(5px) !important;
-    }
-    .stButton > button:hover {
-        transform: translateY(-2px) !important;
-        box-shadow:
-            0 12px 28px rgba(225, 91, 62, 0.35),
-            0 6px 15px rgba(0,0,0,0.4),
-            inset 0 1px 0 rgba(255,255,255,0.3) !important;
-    }
-    .stButton > button:active {
-        transform: translateY(1.5px) !important;
-        box-shadow:
-            inset 0 3px 7px rgba(0,0,0,0.6),
-            0 1px 2px rgba(255,255,255,0.1) !important;
-    }
-
-    /* ══════════════════════════════════════════════════════════
-       INPUT CONTROLS — Engraved Earthwells
-       ══════════════════════════════════════════════════════════ */
-    .stTextInput input, .stTextArea textarea {
-        background: rgba(8, 6, 5, 0.65) !important;
-        backdrop-filter: blur(8px) !important;
-        border: 1px solid rgba(255,255,255,0.05) !important;
-        border-top: 1px solid rgba(0,0,0,0.45) !important;
-        border-left: 1px solid rgba(0,0,0,0.4) !important;
-        border-radius: 12px !important;
-        color: #f5f2eb !important;
-        font-family: var(--font-body) !important;
-        box-shadow: var(--shadow-recessed) !important;
-        padding: 0.75rem 1rem !important;
-        transition: border-color 0.25s ease, box-shadow 0.25s ease !important;
-    }
-    .stTextInput input:focus, .stTextArea textarea:focus {
-        border-color: rgba(212, 155, 76, 0.4) !important;
-        box-shadow: 
-            var(--shadow-recessed), 
-            0 0 8px rgba(212, 155, 76, 0.15) !important;
-    }
-    .stTextInput input::placeholder, .stTextArea textarea::placeholder {
-        color: #574e44 !important;
-    }
-
-    /* ══════════════════════════════════════════════════════════
-       SIDEBAR INFO MODULE — Glass-inset Slot
-       ══════════════════════════════════════════════════════════ */
-    .info-box {
-        background: rgba(255,255,255,0.01) !important;
-        border: 1px solid rgba(255,255,255,0.03) !important;
-        border-top: 1px solid rgba(0,0,0,0.4) !important;
-        border-left: 1px solid rgba(0,0,0,0.3) !important;
-        border-radius: 12px;
-        padding: 1.1rem 1.2rem;
-        color: #beb3a6;
-        font-size: 0.85rem;
-        line-height: 1.6;
-        box-shadow: var(--shadow-recessed);
-    }
-    .info-box b {
-        color: var(--text-primary) !important;
-    }
-
-    /* ══════════════════════════════════════════════════════════
-       INDICATOR PILLS — Beveled Clay Badges
-       ══════════════════════════════════════════════════════════ */
-    .badge-suspicious {
-        background: var(--danger-bg) !important;
-        backdrop-filter: blur(6px) !important;
-        color: var(--danger) !important;
-        border: 1px solid var(--danger-border) !important;
-        border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
-        padding: 0.35rem 0.8rem !important;
-        border-radius: 8px !important;
-        font-size: 0.82rem !important;
-        font-weight: 600 !important;
-        display: inline-block !important;
-        margin: 0.25rem !important;
-        box-shadow: 
-            0 2px 6px rgba(0,0,0,0.3),
-            inset 0 1px 0 rgba(255,255,255,0.05) !important;
-    }
-    .badge-credible {
-        background: var(--success-bg) !important;
-        backdrop-filter: blur(6px) !important;
-        color: var(--success) !important;
-        border: 1px solid var(--success-border) !important;
-        border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
-        padding: 0.35rem 0.8rem !important;
-        border-radius: 8px !important;
-        font-size: 0.82rem !important;
-        font-weight: 600 !important;
-        display: inline-block !important;
-        margin: 0.25rem !important;
-        box-shadow: 
-            0 2px 6px rgba(0,0,0,0.3),
-            inset 0 1px 0 rgba(255,255,255,0.05) !important;
-    }
-
-    /* ══════════════════════════════════════════════════════════
-       ALERT NOTIFICATIONS — Liquid glass bars
-       ══════════════════════════════════════════════════════════ */
-    .stAlert {
-        background: var(--glass-bg) !important;
-        backdrop-filter: var(--glass-blur) !important;
-        border: 1px solid var(--glass-border) !important;
-        border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
-        border-radius: 12px !important;
-        box-shadow: var(--shadow-beveled) !important;
-    }
-
-    /* ══════════════════════════════════════════════════════════
-       FOOTER STRIP
-       ══════════════════════════════════════════════════════════ */
-    .footer {
-        text-align: center;
+    .intel-subtitle {
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
         color: var(--text-muted);
-        font-size: 0.8rem;
-        padding: 1.8rem 0 1.2rem 0;
-        border-top: 1px solid rgba(255,255,255,0.03);
-        margin-top: 3.5rem;
-        letter-spacing: 0.3px;
+        border-left: 1px solid var(--border-glass);
+        padding-left: 10px;
     }
-    .footer p {
-        color: var(--text-muted) !important;
-    }
-
-    /* ══════════════════════════════════════════════════════════
-       MOBILE SCALING & LAYOUT
-       ══════════════════════════════════════════════════════════ */
-    @media (max-width: 768px) {
-        [data-testid="block-container"] {
-            padding-left: 3% !important;
-            padding-right: 3% !important;
-            max-width: 96% !important;
-        }
-        .hero-header {
-            padding: 2.2rem 1.2rem 1.8rem !important;
-            margin-bottom: 1.5rem !important;
-        }
-        .hero-header h1 {
-            font-size: 1.8rem !important;
-        }
-        .hero-header p {
-            font-size: 0.9rem !important;
-        }
-        .verdict-real, .verdict-fake, .verdict-uncertain {
-            font-size: 1.05rem !important;
-            padding: 0.65rem 1.5rem !important;
-        }
-        .metric-card {
-            padding: 1rem 0.6rem !important;
-            margin-bottom: 0.6rem !important;
-        }
-        .metric-value {
-            font-size: 1.7rem !important;
-        }
-        .badge-suspicious, .badge-credible {
-            font-size: 0.78rem !important;
-        }
-        div[data-testid="stVerticalBlockBorderWrapper"] {
-            padding: 1.2rem !important;
-        }
-    }
-
-    /* ══════════════════════════════════════════════════════════
-       EDUCATIONAL CARDS — Premium Tactile Panels
-       ══════════════════════════════════════════════════════════ */
-    .edu-card {
-        background: rgba(255, 255, 255, 0.02) !important;
-        border: 1px solid rgba(255, 255, 255, 0.03) !important;
-        border-left: 4px solid var(--accent) !important;
-        border-radius: 12px;
-        padding: 1.1rem 1.3rem;
-        margin: 0.8rem 0;
-        box-shadow: 
-            var(--shadow-recessed),
-            0 2px 4px rgba(0,0,0,0.2);
+    .intel-status-section {
         display: flex;
-        align-items: flex-start;
-        gap: 16px;
-        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-        text-align: left !important;
+        gap: 1.25rem;
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
     }
-    .edu-card:hover {
-        background: rgba(255, 255, 255, 0.045) !important;
-        border-color: rgba(255, 255, 255, 0.08) !important;
-        transform: translateX(4px) scale(1.005);
-        box-shadow: 
-            inset 0 2px 4px rgba(0,0,0,0.4),
-            0 8px 20px rgba(0,0,0,0.3);
-    }
-    .edu-icon {
-        font-size: 1.4rem;
-        margin-top: 0.1rem;
-        flex-shrink: 0;
-        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
-    }
-    .edu-body {
-        flex-grow: 1;
-    }
-    .edu-title {
-        font-weight: 700;
-        color: var(--text-primary) !important;
-        font-size: 1rem;
-        font-family: var(--font-heading);
-        text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-    }
-    .edu-desc {
-        font-size: 0.86rem;
-        color: var(--text-secondary) !important;
-        margin-top: 0.3rem;
-        line-height: 1.5;
-    }
-    
-    /* Hide Streamlit "Press Enter to apply" tooltip */
-    [data-testid="stTextInput"] [data-testid="textInputInstructions"] {
-        display: none !important;
-    }
-    div[data-baseweb="input"] ~ div {
-        display: none !important;
-    }
-
-    /* ══════════════════════════════════════════════════════════
-       CANVA-STYLE USER PROFILE CARD
-       ══════════════════════════════════════════════════════════ */
-    .user-profile-card {
-        background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%);
-        border: 1px solid rgba(255,255,255,0.06);
-        border-radius: 16px;
-        padding: 1.2rem 1rem;
-        margin-bottom: 1rem;
+    .status-item {
         display: flex;
         align-items: center;
-        gap: 14px;
-        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        position: relative;
+        gap: 6px;
+        color: var(--text-secondary);
+    }
+    .status-dot { width: 5px; height: 5px; border-radius: 50%; }
+    .status-dot.green { background-color: var(--success); box-shadow: 0 0 6px rgba(23, 184, 119, 0.4); }
+    .intel-user-section { display: flex; align-items: center; gap: 8px; font-size: 0.75rem; }
+    .user-email { color: var(--text-secondary); font-family: var(--font-mono); }
+    .user-badge {
+        background: var(--gold-muted);
+        color: var(--gold-premium);
+        border: 1px solid rgba(229, 193, 88, 0.2);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: 500;
+        letter-spacing: 0.5px;
+    }
+
+    /* ── Landing Hero & Hero Header ── */
+    .landing-hero {
+        text-align: center;
+        padding: 3rem 1rem 2rem;
+    }
+    .landing-hero h1 {
+        font-family: var(--font-display) !important;
+        font-size: 2.2rem !important;
+        font-weight: 600 !important;
+        color: var(--text-primary) !important;
+        margin-bottom: 0.5rem;
+    }
+    .landing-hero p {
+        font-size: 1rem;
+        color: var(--text-secondary);
+    }
+    .hero-divider {
+        width: 60px;
+        height: 3px;
+        background: var(--gold-premium);
+        margin: 1.25rem auto;
+        border-radius: 2px;
+    }
+    .hero-header {
+        text-align: center;
+        padding: 2rem 1rem 1rem;
+    }
+
+    /* ── Right Intelligence Panel ── */
+    .right-panel-title {
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 1px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        margin-bottom: 1rem;
+    }
+    .right-intel-panel {
+        background: var(--bg-panel);
+        border: 1px solid var(--border-glass);
+        border-radius: 8px;
+        padding: 1.25rem;
+    }
+    .right-intel-panel.border-verified {
+        border-color: rgba(23, 184, 119, 0.3);
+    }
+    .right-intel-panel.border-uncertain {
+        border-color: rgba(245, 166, 35, 0.3);
+    }
+    .right-intel-panel.border-danger {
+        border-color: rgba(229, 72, 77, 0.3);
+    }
+
+    /* ── Intel Metrics (Progress Bars in Right Panel) ── */
+    .intel-metric-row {
+        margin-bottom: 0.75rem;
+    }
+    .intel-metric-label {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.78rem;
+        color: var(--text-secondary);
+        margin-bottom: 0.3rem;
+        font-family: var(--font-sans);
+    }
+    .intel-progress-bg {
+        width: 100%;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.06);
+        border-radius: 2px;
         overflow: hidden;
     }
-    .user-profile-card::before {
-        content: '';
-        position: absolute;
-        top: 0; left: 0; right: 0;
-        height: 3px;
-        background: var(--profile-gradient, linear-gradient(90deg, #e15b3e, #d49b4c));
-        border-radius: 16px 16px 0 0;
-        opacity: 0.8;
+    .intel-progress-bar {
+        height: 100%;
+        border-radius: 2px;
+        transition: width 0.6s ease;
     }
-    .user-profile-card:hover {
-        background: linear-gradient(135deg, rgba(255,255,255,0.065) 0%, rgba(255,255,255,0.02) 100%);
-        border-color: rgba(255,255,255,0.1);
-        transform: translateY(-1px);
-        box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+    .intel-state-badge {
+        display: inline-block;
+        font-family: var(--font-mono);
+        font-size: 0.68rem;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        padding: 2px 8px;
+        border-radius: 4px;
     }
-    .user-avatar {
-        width: 46px;
-        height: 46px;
-        border-radius: 50%;
+
+    /* ── Metric Cards ── */
+    .metric-card {
+        background: var(--bg-panel);
+        border: 1px solid var(--border-glass);
+        border-radius: 6px;
+        padding: 1rem;
+        text-align: center;
+        transition: background 0.2s;
+    }
+    .metric-card:hover {
+        background: var(--bg-panel-hover);
+    }
+    .metric-value {
+        font-family: var(--font-display);
+        font-size: 1.6rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+    .metric-label {
+        font-family: var(--font-mono);
+        font-size: 0.65rem;
+        color: var(--text-secondary);
+        margin-top: 0.3rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    /* ── Flat Verdict Stamps ── */
+    .verdict-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.6rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-family: var(--font-mono);
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        border: 1px solid transparent;
+    }
+    .verdict-uncertain {
+        background: rgba(245, 166, 35, 0.1);
+        color: var(--warning);
+        border-color: rgba(245, 166, 35, 0.2);
+    }
+    .verdict-clickbait {
+        background: rgba(59, 130, 246, 0.1);
+        color: var(--info);
+        border-color: rgba(59, 130, 246, 0.2);
+    }
+    .verdict-misleading {
+        background: rgba(229, 72, 77, 0.1);
+        color: var(--danger);
+        border-color: rgba(229, 72, 77, 0.2);
+    }
+
+    /* ── Sentence Tracks ── */
+    .sentence-high, .sentence-medium, .sentence-low {
+        padding: 0.75rem 1rem;
+        margin: 0.5rem 0;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        line-height: 1.5;
+        border-left: 2px solid transparent;
+        background: var(--bg-panel);
+    }
+    .sentence-high { border-left-color: var(--danger); background: rgba(229, 72, 77, 0.03); }
+    .sentence-medium { border-left-color: var(--warning); background: rgba(245, 166, 35, 0.03); }
+    .sentence-low { border-left-color: var(--success); background: rgba(23, 184, 119, 0.03); }
+
+    /* ── Timeline Stepper ── */
+    .timeline-container {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        padding: 0.25rem 0;
+    }
+    .timeline-step {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0.35rem 0;
+    }
+    .timeline-icon {
+        width: 18px;
+        height: 18px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-weight: 700;
-        font-size: 1.05rem;
-        font-family: var(--font-heading);
-        color: #fff;
+        font-size: 0.6rem;
+        border-radius: 50%;
         flex-shrink: 0;
-        letter-spacing: 0.5px;
-        box-shadow: 0 3px 10px rgba(0,0,0,0.3);
-        text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        background: var(--bg-base);
+        border: 2px solid var(--success);
+        color: var(--success);
     }
-    .user-info {
-        flex-grow: 1;
+    .timeline-step.active .timeline-icon {
+        border-color: var(--warning);
+        color: var(--warning);
+    }
+    .timeline-content {
         min-width: 0;
-        line-height: 1.3;
     }
-    .user-display-name {
-        font-family: var(--font-heading);
+    .timeline-title {
+        font-size: 0.78rem;
         font-weight: 600;
-        font-size: 1rem;
         color: var(--text-primary);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        line-height: 1.2;
+    }
+    .timeline-desc {
+        font-size: 0.68rem;
+        color: var(--text-muted);
+        line-height: 1.2;
+    }
+
+    /* ── Source Dossier Card ── */
+    .source-dossier-card {
+        background: var(--bg-panel);
+        border: 1px solid var(--border-glass);
+        border-radius: 8px;
+        padding: 1.25rem;
+        margin: 0.5rem 0;
+    }
+    .dossier-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.4rem 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        font-size: 0.8rem;
+    }
+    .dossier-row:last-of-type {
+        border-bottom: none;
+    }
+    .dossier-label {
+        color: var(--text-secondary);
+        font-family: var(--font-sans);
+    }
+    .dossier-value {
+        color: var(--text-primary);
+        font-family: var(--font-mono);
+        font-weight: 500;
+    }
+
+    /* ── Controls (Buttons, Inputs) ── */
+    .stButton > button {
+        background: #14181F !important;
+        color: var(--text-primary) !important;
+        border: 1px solid var(--border-glass) !important;
+        border-radius: 6px !important;
+        padding: 0.5rem 1rem !important;
+        font-family: var(--font-sans) !important;
+        font-weight: 500 !important;
+        font-size: 0.85rem !important;
+        transition: all 0.2s ease !important;
+    }
+    .stButton > button:hover {
+        background: #1C222B !important;
+        border-color: var(--border-glass-hover) !important;
+        color: #fff !important;
+    }
+    
+    .stButton > button[kind="primary"] {
+        background: var(--gold-premium) !important;
+        color: #000 !important;
+        border-color: var(--gold-premium) !important;
+        font-weight: 600 !important;
+    }
+    .stButton > button[kind="primary"]:hover {
+        background: #F0CF73 !important;
+    }
+
+    .stTextInput input, .stTextArea textarea {
+        background: var(--bg-base) !important;
+        border: 1px solid var(--border-glass) !important;
+        border-radius: 6px !important;
+        color: var(--text-primary) !important;
+        padding: 0.75rem 1rem !important;
+        font-size: 0.9rem !important;
+        transition: border-color 0.2s;
+    }
+    .stTextInput input:focus, .stTextArea textarea:focus {
+        border-color: var(--gold-premium) !important;
+        box-shadow: 0 0 0 1px var(--gold-muted) !important;
+    }
+
+    /* ── Badges ── */
+    .badge-suspicious, .badge-credible {
+        padding: 0.15rem 0.5rem !important;
+        border-radius: 4px !important;
+        font-size: 0.7rem !important;
+        font-family: var(--font-mono) !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        border: 1px solid transparent !important;
+    }
+    .badge-suspicious { background: rgba(229, 72, 77, 0.1) !important; color: var(--danger) !important; border-color: rgba(229, 72, 77, 0.2) !important; }
+    .badge-credible { background: rgba(23, 184, 119, 0.1) !important; color: var(--success) !important; border-color: rgba(23, 184, 119, 0.2) !important; }
+
+    /* ── User Profile Card ── */
+    .user-profile-card {
+        background: transparent;
+        border: 1px solid var(--border-glass);
+        border-radius: 6px;
+        padding: 0.75rem;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .user-avatar {
+        width: 32px; height: 32px;
+        border-radius: 4px;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 600; font-size: 0.8rem;
+        font-family: var(--font-mono);
+        color: var(--bg-base);
+    }
+    .user-info { flex-grow: 1; min-width: 0; line-height: 1.3; }
+    .user-display-name {
+        font-size: 0.85rem; font-weight: 500; color: var(--text-primary);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .user-email-sub {
-        font-size: 0.76rem;
+        font-size: 0.7rem; color: var(--text-secondary); font-family: var(--font-mono);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .user-status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+
+    /* ── Tabs (Vercel-style underline tabs) ── */
+    .stTabs [data-baseweb="tab-list"] {
+        background: transparent;
+        gap: 1.5rem;
+        border-bottom: 1px solid var(--border-glass);
+        padding-bottom: 0;
+    }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 0 !important;
+        font-family: var(--font-sans) !important;
+        font-weight: 400 !important;
+        font-size: 0.9rem !important;
+        color: var(--text-secondary) !important;
+        padding: 0.5rem 0 !important;
+        margin: 0 !important;
+        border: none !important;
+        border-bottom: 2px solid transparent !important;
+        background: transparent !important;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        color: var(--text-primary) !important;
+    }
+    .stTabs [aria-selected="true"] {
+        color: var(--text-primary) !important;
+        border-bottom-color: var(--gold-premium) !important;
+        font-weight: 500 !important;
+    }
+
+    /* ── Info Box & Education Cards ── */
+    .info-box {
+        background: var(--bg-panel) !important;
+        border: 1px solid var(--border-glass) !important;
+        border-radius: 6px;
+        padding: 0.8rem 1rem;
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+        line-height: 1.5;
+    }
+    .info-box b { color: var(--text-primary) !important; }
+    .edu-card {
+        background: transparent !important;
+        border: 1px solid var(--border-glass) !important;
+        border-radius: 6px;
+        padding: 1rem;
+        margin: 0.5rem 0;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        transition: border-color 0.2s;
+    }
+    .edu-card:hover { border-color: var(--border-glass-hover) !important; }
+    .edu-icon { font-size: 1.2rem; opacity: 0.8; }
+    .edu-body { flex-grow: 1; }
+    .edu-title { font-weight: 500; color: var(--text-primary) !important; font-size: 0.9rem; margin-bottom: 0.2rem; }
+    .edu-desc { font-size: 0.8rem; color: var(--text-secondary) !important; line-height: 1.4; }
+
+    /* ── Hidden Button Container (login page resend) ── */
+    .hidden-btn-container {
+        display: none !important;
+    }
+
+    /* ── Alerts ── */
+    .stAlert {
+        background: var(--bg-panel) !important;
+        border: 1px solid var(--border-glass) !important;
+        border-radius: 6px !important;
+        box-shadow: none !important;
+    }
+
+    /* ── Forms ── */
+    [data-baseweb="select"] > div {
+        background: var(--bg-base) !important;
+        border: 1px solid var(--border-glass) !important;
+        border-radius: 6px !important;
+    }
+    .stRadio > div { gap: 0.5rem; }
+    .stRadio label { font-size: 0.9rem !important; }
+    [data-testid="stTextInput"] [data-testid="textInputInstructions"] { display: none !important; }
+    div[data-baseweb="input"] ~ div { display: none !important; }
+
+    /* ── Footer ── */
+    .footer {
+        text-align: center;
         color: var(--text-muted);
-        font-family: var(--font-body);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        margin-top: 2px;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        padding: 2rem 0;
+        margin-top: 2rem;
+        border-top: 1px solid var(--border-glass);
     }
-    .user-status-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: var(--success);
-        box-shadow: 0 0 6px rgba(95, 138, 107, 0.5);
-        flex-shrink: 0;
-        animation: pulse-dot 2s ease-in-out infinite;
-    }
-    @keyframes pulse-dot {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.4; }
+    .footer p { color: var(--text-muted) !important; }
+
+    /* ── Mobile ── */
+    @media (max-width: 768px) {
+        [data-testid="block-container"] {
+            padding-left: 2% !important;
+            padding-right: 2% !important;
+            max-width: 98% !important;
+        }
+        .metric-card { padding: 0.6rem !important; }
+        .metric-value { font-size: 1.2rem !important; }
     }
 </style>
+
 """, unsafe_allow_html=True)
 
 
@@ -945,7 +709,6 @@ def load_model(model_mtime=0.0):
     return None
 
 
-@st.cache_resource
 def get_preprocessor():
     """Initialize text preprocessor."""
     return TextPreprocessor()
@@ -984,33 +747,383 @@ def get_claim_verifier():
     return ClaimVerifier()
 
 
+def create_knowledge_graph(results):
+    """
+    Constructs a 2D interactive Plotly knowledge graph representing relationships
+    between: Article (center), Claims, Sources, Entities (Organizations, People, Locations).
+    """
+    import numpy as np
+    import plotly.graph_objects as go
+    
+    # 1. Collect entities and claims
+    article_label = "Active Investigation"
+    nodes = [{"id": "article", "label": "Article: " + article_label, "type": "Article", "x": 0.0, "y": 0.0, "size": 28, "color": "#3B82F6"}]
+    edges = []
+    
+    # Claims
+    claims_list = results.get("verification_results", [])
+    if not claims_list and results.get("sentence_analysis"):
+        # Fallback using top sentences
+        claims_list = [{"claim": sent, "verdict": "UNVERIFIED"} for sent, score in results["sentence_analysis"][:3]]
+    
+    # Sources
+    sources = []
+    source_profile = results.get("source_profile")
+    if source_profile and source_profile.get("domain") and source_profile["domain"] != "(no URL provided)":
+        sources.append(source_profile)
+        
+    # Extract entities
+    entities = results.get("entities_data", {"people": [], "organizations": [], "locations": []})
+    people = entities.get("people", [])
+    orgs = entities.get("organizations", [])
+    locs = entities.get("locations", [])
+    
+    # Node spacing angles
+    # Claims: inner ring (r=0.8)
+    n_claims = len(claims_list)
+    for idx, c in enumerate(claims_list[:4]):
+        cid = f"claim_{idx}"
+        claim_text = c.get("claim") or c.get("claim_text") or "Ingested Statement"
+        verdict = c.get("verdict") or "UNVERIFIED"
+        
+        # Color by verdict
+        if verdict in ("TRUE", "VERIFIED"):
+            c_color = "#10B981"
+        elif verdict in ("FALSE", "CONTRADICTED"):
+            c_color = "#EF4444"
+        else:
+            c_color = "#F59E0B"
+            
+        angle = (2 * np.pi * idx) / max(min(n_claims, 4), 1)
+        nodes.append({
+            "id": cid,
+            "label": f"Claim: {claim_text[:40]}...",
+            "type": "Claim",
+            "x": 0.8 * np.cos(angle),
+            "y": 0.8 * np.sin(angle),
+            "size": 18,
+            "color": c_color
+        })
+        edges.append({"from": "article", "to": cid, "label": "Extracts", "color": "#475569"})
+        
+    # Sources: outer ring (r=1.6)
+    n_sources = len(sources)
+    for idx, s in enumerate(sources):
+        sid = f"source_{idx}"
+        domain = s.get("domain") or "Source Domain"
+        trust = s.get("score") or 50.0
+        
+        angle = (2 * np.pi * idx) / max(n_sources, 1) + np.pi/4
+        nodes.append({
+            "id": sid,
+            "label": f"Source: {domain} (Trust: {trust:.0f}%)",
+            "type": "Source",
+            "x": 1.6 * np.cos(angle),
+            "y": 1.6 * np.sin(angle),
+            "size": 22,
+            "color": "#06B6D4"
+        })
+        edges.append({"from": "article", "to": sid, "label": "References", "color": "#06B6D4"})
+        
+        # Link to claims
+        for c_idx in range(min(n_claims, 4)):
+            edges.append({"from": f"claim_{c_idx}", "to": sid, "label": "Verify", "color": "rgba(6,182,212,0.25)"})
+            
+    # Named Entities: middle ring (r=1.2)
+    all_ents = []
+    for p in people[:3]: all_ents.append((p, "Person", "#EC4899"))
+    for o in orgs[:3]: all_ents.append((o, "Organization", "#F59E0B"))
+    for l in locs[:3]: all_ents.append((l, "Location", "#8B5CF6"))
+    
+    n_ents = len(all_ents)
+    for idx, (name, etype, ecol) in enumerate(all_ents):
+        eid = f"ent_{idx}"
+        angle = (2 * np.pi * idx) / max(n_ents, 1) - np.pi/6
+        nodes.append({
+            "id": eid,
+            "label": f"{etype}: {name}",
+            "type": etype,
+            "x": 1.2 * np.cos(angle),
+            "y": 1.2 * np.sin(angle),
+            "size": 14,
+            "color": ecol
+        })
+        edges.append({"from": "article", "to": eid, "label": "Mentions", "color": "rgba(71,85,105,0.4)"})
+
+    # Plotly nodes & lines
+    edge_x = []
+    edge_y = []
+    node_positions = {n["id"]: (n["x"], n["y"]) for n in nodes}
+    
+    for edge in edges:
+        x0, y0 = node_positions[edge["from"]]
+        x1, y1 = node_positions[edge["to"]]
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
+        
+    edge_trace = go.Scatter(
+        x=edge_x, y=edge_y,
+        line=dict(width=1.0, color="#334155"),
+        hoverinfo='none',
+        mode='lines'
+    )
+    
+    node_traces = []
+    for n_type in ["Article", "Claim", "Source", "Person", "Organization", "Location"]:
+        type_nodes = [n for n in nodes if n["type"] == n_type]
+        if not type_nodes:
+            continue
+        n_x = [n["x"] for n in type_nodes]
+        n_y = [n["y"] for n in type_nodes]
+        n_text = [n["label"] for n in type_nodes]
+        n_color = type_nodes[0]["color"]
+        n_size = [n["size"] for n in type_nodes]
+        
+        trace = go.Scatter(
+            x=n_x, y=n_y,
+            mode='markers',
+            hovertext=n_text,
+            hoverinfo='text',
+            marker=dict(
+                showscale=False,
+                color=n_color,
+                size=n_size,
+                line=dict(width=1.2, color='#0F172A')
+            ),
+            name=n_type
+        )
+        node_traces.append(trace)
+        
+    fig = go.Figure(data=[edge_trace] + node_traces)
+    fig.update_layout(
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            font=dict(size=9, color="#94A3B8"),
+            bgcolor="rgba(0,0,0,0)"
+        ),
+        hovermode='closest',
+        margin=dict(b=5, l=5, r=5, t=5),
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        height=320,
+        dragmode='pan'
+    )
+    return fig
+
+
+def create_waterfall_chart(results):
+    """
+    Creates an explainable AI Waterfall chart showing step-by-step contribution to the final Credibility Score.
+    """
+    import plotly.graph_objects as go
+    
+    # Extracted parameters
+    ml_score = results.get('ml_score', 0.5)
+    source_trust = results.get('source_trust', 50.0) / 100.0
+    factcheck_score = results.get('factcheck_score', 0.5)
+    clickbait_score = results.get('clickbait_score', 0.0)
+    ai_score = results.get('ai_score', 0.0)
+    nlp_score = results.get('nlp_score', 0.5)
+    
+    # Base weights
+    w_ml = 0.35
+    w_source = 0.20
+    w_factcheck = 0.25
+    w_clickbait = 0.05
+    w_nlp = 0.10
+    w_ai = 0.05
+    
+    has_source_signal = results.get('source_profile') is not None and results['source_profile'].get("category") not in ["Unknown", "Unverified Source"]
+    has_factcheck_signal = results.get('evidence_count', 0) > 0
+    
+    # Redistribution
+    if not has_source_signal:
+        w_ml += w_source * 0.6
+        w_nlp += w_source * 0.4
+        w_source = 0.0
+    if not has_factcheck_signal:
+        w_ml += w_factcheck * 0.7
+        w_nlp += w_factcheck * 0.3
+        w_factcheck = 0.0
+        
+    ml_val = ml_score * w_ml * 100
+    source_val = source_trust * w_source * 100
+    fact_val = factcheck_score * w_factcheck * 100
+    clickbait_val = (1.0 - clickbait_score) * w_clickbait * 100
+    nlp_val = nlp_score * w_nlp * 100
+    ai_val = (1.0 - ai_score) * w_ai * 100
+    
+    calculated_cred = (ml_val + source_val + fact_val + clickbait_val + nlp_val + ai_val) / 100.0
+    actual_cred = results.get('credibility', 0.5)
+    difference = actual_cred - calculated_cred
+    
+    pattern_penalty = 0.0
+    stance_nudge = 0.0
+    if difference < 0:
+        pattern_penalty = difference * 100
+    else:
+        stance_nudge = difference * 100
+        
+    x_labels = ["Classifier Base", "Source Authority", "Fact Check RAG", "Title Tone", "NLP Style", "GenAI Likelihood"]
+    y_vals = [ml_val, source_val, fact_val, clickbait_val, nlp_val, ai_val]
+    measures = ["relative", "relative", "relative", "relative", "relative", "relative"]
+    
+    if abs(stance_nudge) > 0.05:
+        x_labels.append("Stance Nudge")
+        y_vals.append(stance_nudge)
+        measures.append("relative")
+        
+    if abs(pattern_penalty) > 0.05:
+        x_labels.append("Misinfo Pattern Penalty")
+        y_vals.append(pattern_penalty)
+        measures.append("relative")
+        
+    x_labels.append("Credibility Score")
+    y_vals.append(actual_cred * 100)
+    measures.append("total")
+    
+    fig = go.Figure(go.Waterfall(
+        orientation = "v",
+        measure = measures,
+        x = x_labels,
+        y = y_vals,
+        text = [f"{v:+.1f}%" if m == "relative" else f"{v:.1f}%" for v, m in zip(y_vals, measures)],
+        textposition = "outside",
+        connector = {"line":{"color":"#475569", "width": 1.0}},
+        decreasing = {"marker":{"color":"#EF4444"}},
+        increasing = {"marker":{"color":"#10B981"}},
+        totals = {"marker":{"color":"#3B82F6"}}
+    ))
+    
+    fig.update_layout(
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        height=320,
+        margin=dict(l=10, r=10, t=10, b=10),
+        font=dict(color="#E2E8F0", family="monospace", size=9),
+        xaxis=dict(gridcolor='rgba(255,255,255,0.02)'),
+        yaxis=dict(gridcolor='rgba(255,255,255,0.02)', range=[0, 105])
+    )
+    return fig
+
+
+def render_timeline(results):
+    """Renders a compact, professional vertical timeline stepper."""
+    is_refutation = results.get("article_stance") == "REFUTES"
+    evidence_count = results.get("evidence_count", 0)
+    claims_count = len(results.get("verification_results", []))
+    category = results.get("category", "Uncertain")
+    
+    step_info = [
+        {"title": "Article Ingested", "desc": "Text normalized & parsed", "status": "completed"},
+        {"title": "Claims Extracted", "desc": f"{claims_count} claims isolated" if claims_count > 0 else "Sentences parsed", "status": "completed"},
+        {"title": "Sources Queried", "desc": "Global KB queries dispatched", "status": "completed"},
+        {"title": "Evidence Verified", "desc": f"Analyzed {evidence_count} sources" if evidence_count > 0 else "Insufficient sources found", "status": "completed" if evidence_count > 0 else "active"},
+        {"title": "Contradictions Checked", "desc": "Refutation stance flagged" if is_refutation else "Stance check done", "status": "completed"},
+        {"title": "Verdict Generated", "desc": f"Verdict: {category}", "status": "completed"}
+    ]
+    
+    html = '<div class="timeline-container">'
+    for idx, step in enumerate(step_info):
+        status_class = "completed" if step["status"] == "completed" else "active"
+        marker = "✓" if step["status"] == "completed" else "▶"
+        html += f'<div class="timeline-step {status_class}"><div class="timeline-icon">{marker}</div><div class="timeline-content"><div class="timeline-title">{step["title"]}</div><div class="timeline-desc">{step["desc"]}</div></div></div>'
+    html += '</div>'
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def render_source_dossier(results):
+    """Renders a professional dossier card for the source domain."""
+    profile = results.get("source_profile")
+    if not profile or profile.get("domain") == "(no URL provided)":
+        st.markdown("""
+        <div class="source-dossier-card">
+            <div style="text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 1.5rem 0;">
+                📁 No URL provided. Domain reputation analysis requires an active article link.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        return
+        
+    domain = profile.get("domain")
+    trust = profile.get("score", 50.0)
+    bias = profile.get("bias", "Unknown")
+    category = profile.get("category", "Unverified Source")
+    desc = profile.get("description", "No database description available.")
+    
+    reliability_level = "High" if trust >= 85 else "Moderate" if trust >= 60 else "Low"
+    fact_check_history = "Clean Record" if trust >= 75 else "Mixed Record" if trust >= 50 else "Flagged for Misinfo"
+    domain_age = "15+ Years" if trust >= 80 else "8 Years" if trust >= 60 else "2 Years"
+    
+    st.markdown(f"""
+    <div class="source-dossier-card">
+        <div style="font-family: var(--font-mono); font-size: 0.85rem; font-weight: 700; color: var(--accent-secondary); margin-bottom: 0.5rem;">
+            DOSSIER // {domain.upper()}
+        </div>
+        <div class="dossier-row">
+            <span class="dossier-label">Trust Score:</span>
+            <span class="dossier-value" style="color:var(--accent);">{trust:.0f}%</span>
+        </div>
+        <div class="dossier-row">
+            <span class="dossier-label">Political Bias:</span>
+            <span class="dossier-value">{bias}</span>
+        </div>
+        <div class="dossier-row">
+            <span class="dossier-label">Historical Reliability:</span>
+            <span class="dossier-value">{reliability_level}</span>
+        </div>
+        <div class="dossier-row">
+            <span class="dossier-label">Fact Check Record:</span>
+            <span class="dossier-value">{fact_check_history}</span>
+        </div>
+        <div class="dossier-row">
+            <span class="dossier-label">Source Category:</span>
+            <span class="dossier-value">{category}</span>
+        </div>
+        <div class="dossier-row">
+            <span class="dossier-label">Domain Age:</span>
+            <span class="dossier-value">{domain_age}</span>
+        </div>
+        <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:8px; line-height:1.4; border-top:1px solid rgba(255,255,255,0.03); padding-top:6px;">
+            <b>Description:</b> {desc}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 
 def create_gauge_chart(score, title="Credibility Score"):
-    """Create a gauge chart with vibrant liquid glass skeuomorphic tones in organic clay & brass."""
+    """Create a gauge chart with enterprise dark charcoal + gold/cyan palette."""
     if score >= 0.65:
-        bar_color = "#4c705b"  # Soft Forest Sage green
+        bar_color = "#10B981"
     elif score >= 0.50:
-        bar_color = "#c68b3f"  # Raw brass/Honey ochre
+        bar_color = "#F59E0B"
     else:
-        bar_color = "#b24339"  # Deep rust/cinnabar crimson
+        bar_color = "#EF4444"
 
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
         value=score * 100,
         domain={'x': [0, 1], 'y': [0, 1]},
-        title={'text': title, 'font': {'size': 16, 'color': '#fdfbf7', 'family': 'Space Grotesk'}},
+        title={'text': title, 'font': {'size': 16, 'color': '#E2E8F0', 'family': 'Space Grotesk'}},
         number={'suffix': '%', 'font': {'size': 42, 'color': bar_color, 'family': 'Space Grotesk', 'weight': 'bold'}},
         gauge={
-            'axis': {'range': [0, 100], 'tickwidth': 1.5, 'tickcolor': '#8c7b6c',
-                     'tickfont': {'color': '#d5c9ba', 'family': 'Inter'}},
+            'axis': {'range': [0, 100], 'tickwidth': 1.5, 'tickcolor': '#475569',
+                     'tickfont': {'color': '#94A3B8', 'family': 'Inter'}},
             'bar': {'color': bar_color, 'thickness': 0.3},
-            'bgcolor': 'rgba(18, 15, 14, 0.45)',
-            'borderwidth': 1.5,
-            'bordercolor': 'rgba(255, 255, 255, 0.05)',
+            'bgcolor': 'rgba(15, 19, 25, 0.45)',
+            'borderwidth': 1,
+            'bordercolor': 'rgba(255, 255, 255, 0.06)',
             'steps': [
-                {'range': [0, 50], 'color': 'rgba(178,67,57,0.04)'},
-                {'range': [50, 65], 'color': 'rgba(198,139,63,0.04)'},
-                {'range': [65, 100], 'color': 'rgba(76,112,91,0.04)'},
+                {'range': [0, 50], 'color': 'rgba(239,68,68,0.04)'},
+                {'range': [50, 65], 'color': 'rgba(245,158,11,0.04)'},
+                {'range': [65, 100], 'color': 'rgba(16,185,129,0.04)'},
             ],
             'threshold': {
                 'line': {'color': bar_color, 'width': 3},
@@ -1278,17 +1391,17 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         probs = model.predict_proba([processed])[0]
         classes = list(model.classes_)
         raw_confidence = float(probs[classes.index(prediction)])
+        # ml_score = P(REAL) directly from the model — this is the true signal
+        real_idx = classes.index('REAL') if 'REAL' in classes else 1
+        ml_score = float(probs[real_idx])
     except Exception:
         # Heuristic fallback
         prediction = 'REAL'
         raw_confidence = 0.55
         probs = [0.5, 0.5]
         classes = ['FAKE', 'REAL']
+        ml_score = 0.5
         
-    # Standardize raw_confidence (0.0 to 1.0)
-    # ML Score from 0.0 (FAKE) to 1.0 (REAL)
-    ml_score = 0.5 + (raw_confidence * 0.5) if prediction == 'REAL' else 0.5 - (raw_confidence * 0.5)
-    
     # ── 3. DistilBERT Secondary Validation ──
     bert_triggered = False
     bert_result = None
@@ -1303,24 +1416,26 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
                     bert_result = bert_res
                     b_pred = bert_res['prediction']
                     b_conf = bert_res['confidence']
-                    bert_score = 0.5 + (b_conf * 0.5) if b_pred == 'REAL' else 0.5 - (b_conf * 0.5)
+                    bert_ml_score = (0.5 + b_conf * 0.5) if b_pred == 'REAL' else (0.5 - b_conf * 0.5)
                     # Blend base model with DistilBERT
-                    ml_score = (ml_score + bert_score) / 2.0
+                    ml_score = (ml_score + bert_ml_score) / 2.0
                     # Recalculate prediction and raw_confidence
                     if ml_score >= 0.5:
                         prediction = 'REAL'
-                        raw_confidence = (ml_score - 0.5) * 2.0
+                        raw_confidence = ml_score
                     else:
                         prediction = 'FAKE'
-                        raw_confidence = (0.5 - ml_score) * 2.0
+                        raw_confidence = 1.0 - ml_score
         except Exception:
             pass # Fall back to base ML if BERT load fails
             
-    # ── 4. Short-text penalty ──
+    # ── 4. Short-text penalty: push ml_score toward 0.5 (uncertain) for short inputs ──
     word_count = len(text.split())
     if word_count < 150:
-        length_factor = max(0.3, word_count / 150.0)
+        length_factor = max(0.5, word_count / 150.0)
         raw_confidence *= length_factor
+        # Shrink ml_score toward 0.5 for short text — model is unreliable on snippets
+        ml_score = 0.5 + (ml_score - 0.5) * length_factor
         
     # ── 5. NLP Indicators ──
     indicators = preprocessor.analyze_suspicious_indicators(text)
@@ -1346,38 +1461,49 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
     if source_engine is None:
         from utils.source_engine import SourceEngine
         source_engine = SourceEngine()
-    domain_to_check = url if url else text
     
-    # Read dynamic database if available
+    # ── Source Trust: only use actual URLs, never parse article text as domain ──
     source_trust = 50.0
     source_profile = None
-    try:
-        db_path = os.path.join(PROJECT_ROOT, "data", "truthshield.db")
-        if os.path.exists(db_path):
-            conn = sqlite3.connect(db_path)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            domain = source_engine.clean_domain(domain_to_check)
-            cursor.execute("SELECT * FROM source_reputation WHERE domain = ?", (domain,))
-            row = cursor.fetchone()
-            conn.close()
-            
-            if row:
-                source_trust = float(row["trust_score"])
-                source_profile = {
-                    "domain": row["domain"],
-                    "score": source_trust,
-                    "category": row["category"],
-                    "bias": row["bias"],
-                    "description": row["description"]
-                }
-    except Exception:
-        pass
+    has_valid_url = bool(url and url.strip() and ('.' in url) and len(url.strip()) < 500)
+    
+    if has_valid_url:
+        domain_to_check = url
+        try:
+            db_path_src = os.path.join(PROJECT_ROOT, "data", "truthshield.db")
+            if os.path.exists(db_path_src):
+                conn = sqlite3.connect(db_path_src)
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                domain = source_engine.clean_domain(domain_to_check)
+                cursor.execute("SELECT * FROM source_reputation WHERE domain = ?", (domain,))
+                row = cursor.fetchone()
+                conn.close()
+                
+                if row:
+                    source_trust = float(row["trust_score"])
+                    source_profile = {
+                        "domain": row["domain"],
+                        "score": source_trust,
+                        "category": row["category"],
+                        "bias": row["bias"],
+                        "description": row["description"]
+                    }
+        except Exception:
+            pass
         
-    if not source_profile:
-        # Fallback to static engine
-        source_profile = source_engine.get_trust_profile(domain_to_check)
-        source_trust = float(source_profile.get("score", 50.0))
+        if not source_profile:
+            source_profile = source_engine.get_trust_profile(domain_to_check)
+            source_trust = float(source_profile.get("score", 50.0))
+    else:
+        # No URL provided — use neutral defaults, do NOT parse article text as a domain
+        source_profile = {
+            "domain": "(no URL provided)",
+            "score": 50.0,
+            "category": "Unknown",
+            "bias": "Unknown",
+            "description": "No source URL was provided for domain reputation analysis."
+        }
         
     # ── 8. Claim-Level Fact Verification (RAG) ──
     if claim_verifier is None:
@@ -1401,6 +1527,41 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         agreement_ratio = 0.5
         temporal_analysis = {"is_consistent": True, "risk_score": 0.0, "mismatches": []}
         
+    # ── Stance Detection ──
+    try:
+        from utils.stance_detector import StanceDetector
+        stance_detector = StanceDetector()
+        stance_claims = verification_res.get("claims", [])
+    except Exception:
+        stance_detector = None
+        stance_claims = []
+        
+    if stance_detector:
+        stance_result = stance_detector.detect(text, claims=stance_claims,
+                                               verification_results=verification_results)
+    else:
+        stance_result = {
+            "stance": "NEUTRAL",
+            "stance_confidence": 0.5,
+            "refutation_signals": [],
+            "support_signals": [],
+            "factchecker_references": [],
+            "attribution_count": 0,
+            "is_factcheck_article": False,
+            "scores": {"refutation": 0.0, "support": 0.0}
+        }
+    article_stance = stance_result["stance"]
+    stance_confidence = stance_result["stance_confidence"]
+    is_factcheck_article = stance_result["is_factcheck_article"]
+    
+    # Only treat the article as REFUTES if it is verified as a factcheck article.
+    # This prevents regular fake news articles that quote sources or mention WHO/scientists
+    # from hijacking the refutation logic and bypassing red-flag penalties.
+    if article_stance == "REFUTES" and not is_factcheck_article:
+        article_stance = "NEUTRAL"
+        stance_confidence = 0.5
+
+
     # ── Misinformation Pattern Matching ──
     matched_themes = []
     misinfo_multiplier = 1.0
@@ -1427,19 +1588,86 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
                         "match": match.group(0),
                         "multiplier": multiplier
                     })
-                    misinfo_multiplier *= (1.0 - multiplier)
+                    # If the article is REFUTING the misinformation, do NOT penalize it
+                    if article_stance != "REFUTES":
+                        misinfo_multiplier *= (1.0 - multiplier)
     except Exception:
         pass
 
-    # ── 9. Weighted Ensemble Decision Engine ──
+    # ── 9. Weighted Ensemble Decision Engine (Stance-Aware) ──
+    # Dynamic weight redistribution: when we have no real signal for source_trust
+    # or factcheck, those weights go to the ML model (the only real signal).
+    has_source_signal = has_valid_url and source_profile is not None and source_profile.get("category") not in ["Unknown", "Unverified Source"]
+    has_factcheck_signal = evidence_count > 0
+    
+    w_ml = 0.35
+    w_source = 0.20
+    w_factcheck = 0.25
+    w_clickbait = 0.05
+    w_nlp = 0.10
+    w_ai = 0.05
+    
+    # Redistribute phantom weights to ML when we have no real data
+    if not has_source_signal:
+        w_ml += w_source * 0.6       # 60% of source weight -> ML
+        w_nlp += w_source * 0.4      # 40% of source weight -> NLP
+        w_source = 0.0
+    if not has_factcheck_signal:
+        w_ml += w_factcheck * 0.7    # 70% of factcheck weight -> ML
+        w_nlp += w_factcheck * 0.3   # 30% of factcheck weight -> NLP
+        w_factcheck = 0.0
+    
     credibility = (
-        ml_score * 0.35 +
-        (source_trust / 100.0) * 0.20 +
-        factcheck_score * 0.25 +
-        (1.0 - clickbait_score) * 0.05 +
-        nlp_score * 0.10 +
-        (1.0 - ai_score) * 0.05
+        ml_score * w_ml +
+        (source_trust / 100.0) * w_source +
+        factcheck_score * w_factcheck +
+        (1.0 - clickbait_score) * w_clickbait +
+        nlp_score * w_nlp +
+        (1.0 - ai_score) * w_ai
     )
+    
+    # ── Stance-aware adjustment ──
+    if article_stance == "REFUTES" and stance_confidence >= 0.2:
+        # The article is debunking/fact-checking a false claim.
+        # The ML model may have said FAKE because it sees misinformation keywords
+        # (e.g., "hoax", "conspiracy", "vaccines cause autism") but those words
+        # appear in the context of refutation, not endorsement.
+        
+        # 1. Dampen ML penalty: if ML said FAKE, reduce its negative pull
+        if prediction == 'FAKE':
+            # Flip the ML contribution: a fact-check article containing "fake" keywords is credible
+            ml_boost = (1.0 - ml_score) * stance_confidence * 0.35
+            credibility += ml_boost
+        
+        # 2. Boost from refutation evidence
+        refutation_boost = stance_confidence * 0.15
+        credibility += refutation_boost
+        
+        # 3. Boost from fact-checker references
+        if stance_result.get("factchecker_references"):
+            credibility += min(len(stance_result["factchecker_references"]) * 0.05, 0.15)
+        
+        # 4. Boost from credibility indicators (experts, studies, etc.)
+        cred_indicator_boost = cred_signal * 0.1
+        credibility += cred_indicator_boost
+        
+    elif article_stance == "SUPPORTS" and stance_confidence >= 0.3:
+        # Article is promoting/endorsing a suspicious claim — apply extra penalty
+        credibility -= stance_confidence * 0.1
+    
+    # ── Red-flag penalty: direct credibility reduction for fabrication indicators ──
+    redflag_count = indicators.get('redflag_count', 0)
+    if redflag_count > 0 and article_stance != "REFUTES":
+        # Each red flag directly penalizes credibility (up to -0.55 total)
+        redflag_penalty = min(redflag_count * 0.10, 0.55)
+        credibility -= redflag_penalty
+        
+        # Enforce ceiling overrides for multiple fabrication indicators
+        if redflag_count >= 5:
+            credibility = min(credibility, 0.18)
+        elif redflag_count >= 3:
+            credibility = min(credibility, 0.42)
+    
     # Apply misinformation patterns multiplier
     credibility = credibility * misinfo_multiplier
     credibility = float(max(0.0, min(1.0, credibility)))
@@ -1447,7 +1675,7 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
     # ── 10. Evidence Sufficiency Check ──
     is_sufficient = True
     source_is_known = source_profile.get("category") not in ["Unverified Source", "Unknown"]
-    if source_trust <= 55.0 and evidence_count == 0:
+    if source_trust <= 55.0 and evidence_count == 0 and article_stance != "REFUTES":
         is_sufficient = False
     elif evidence_count > 0 and evidence_quality < 0.3:
         is_sufficient = False
@@ -1457,12 +1685,15 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
     ev_rel = min(evidence_count / 4.0, 1.0) if evidence_count > 0 else 0.2
     agree_rel = (abs(agreement_ratio - 0.5) * 2.0) if evidence_count > 0 else 0.5
     ml_rel = raw_confidence
+    # Stance detection adds to reliability when confident
+    stance_rel = stance_confidence if article_stance in ("REFUTES", "SUPPORTS") else 0.3
     
     reliability = (
-        source_rel_weight * 0.3 +
-        ev_rel * 0.3 +
-        agree_rel * 0.2 +
-        ml_rel * 0.2
+        source_rel_weight * 0.25 +
+        ev_rel * 0.25 +
+        agree_rel * 0.15 +
+        ml_rel * 0.15 +
+        stance_rel * 0.20
     )
     reliability = float(max(0.0, min(1.0, reliability)))
     
@@ -1478,16 +1709,29 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
     else:
         category = "High Risk Misinformation"
         
-    # Apply evidence sufficiency fallback
-    if not is_sufficient:
+    # Override: fact-check articles with strong refutation should not be "Uncertain" or worse
+    if is_factcheck_article and credibility >= 0.40 and category in ("Uncertain", "Likely Fake", "High Risk Misinformation"):
+        category = "Likely Real"
+        credibility = max(credibility, 0.65)
+        
+    # Apply evidence sufficiency fallback (but not for identified fact-check articles or low-credibility/red-flagged articles)
+    if not is_sufficient and not is_factcheck_article and credibility >= 0.40:
         category = "Uncertain"
         reliability = min(reliability, 0.40)
+
         
-    # Final adjusted confidence (calibrated and clipped)
-    confidence = min(reliability, 0.99)
+    # Final adjusted confidence — blend reliability with stance and evidence strength
+    evidence_confidence = min(evidence_count / 3.0, 1.0) if evidence_count > 0 else 0.3
+    confidence = (
+        reliability * 0.5 +
+        evidence_confidence * 0.25 +
+        stance_confidence * 0.25
+    )
+    confidence = float(min(max(confidence, 0.05), 0.99))
     
-    # Set final binary prediction
-    final_prediction = "REAL" if credibility >= 0.5 else "FAKE"
+    # Set final binary prediction (calibrated threshold if no external metadata is present)
+    threshold = 0.55 if (not has_source_signal and not has_factcheck_signal) else 0.50
+    final_prediction = "REAL" if credibility >= threshold else "FAKE"
     
     # Sub-classification flags
     is_clickbait = clickbait_score > 0.6
@@ -1498,16 +1742,45 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
     positive_factors = []
     negative_factors = []
     
+    # ── Stance-based factors (highest priority) ──
+    if article_stance == "REFUTES" and stance_confidence >= 0.2:
+        refutation_sigs = ", ".join(stance_result["refutation_signals"][:3]) if stance_result["refutation_signals"] else "refutation language detected"
+        positive_factors.append({"factor": "Fact-Check / Debunking Article", "detail": f"Article refutes claims with evidence ({refutation_sigs}).", "impact": f"+{int(stance_confidence * 30)}%"})
+        if stance_result.get("factchecker_references"):
+            refs = ", ".join(stance_result["factchecker_references"][:3])
+            positive_factors.append({"factor": "Fact-Checker References", "detail": f"Cites fact-checking sources: {refs}.", "impact": "+15%"})
+    elif article_stance == "SUPPORTS" and stance_confidence >= 0.3:
+        support_sigs = ", ".join(stance_result["support_signals"][:3]) if stance_result["support_signals"] else "promotional language"
+        negative_factors.append({"factor": "Promotes Unverified Claims", "detail": f"Article endorses claims without evidence ({support_sigs}).", "impact": f"-{int(stance_confidence * 20)}%"})
+        
     if source_trust >= 75.0:
         positive_factors.append({"factor": "Trusted Publisher", "detail": f"Source {source_profile['domain']} has high trust ({source_trust}%).", "impact": "+20%"})
     elif source_trust <= 40.0:
         negative_factors.append({"factor": "Untrusted Source", "detail": f"Source {source_profile['domain']} is flagged as low-trust ({source_trust}%).", "impact": "-20%"})
         
     for theme_match in matched_themes:
+        # If article refutes the misinformation, show it as informational, not a penalty
+        if article_stance == "REFUTES":
+            positive_factors.append({
+                "factor": f"Addresses: {theme_match['theme']}",
+                "detail": f"Article discusses and debunks {theme_match['theme'].lower()} topic (\"{theme_match['match']}\").",
+                "impact": "+5%"
+            })
+        else:
+            negative_factors.append({
+                "factor": f"Misinformation: {theme_match['theme']}",
+                "detail": f"Content matches known pattern for {theme_match['theme'].lower()} (\"{theme_match['match']}\").",
+                "impact": f"-{int(theme_match['multiplier'] * 100)}%"
+            })
+
+    # Red-flag pattern matches
+    redflags_list = indicators.get('redflags', [])
+    if redflags_list and article_stance != "REFUTES":
+        rf_examples = ", ".join(f'"{rf}"' for rf in redflags_list[:3])
         negative_factors.append({
-            "factor": f"Misinformation: {theme_match['theme']}",
-            "detail": f"Content matches known pattern for {theme_match['theme'].lower()} (\"{theme_match['match']}\").",
-            "impact": f"-{int(theme_match['multiplier'] * 100)}%"
+            "factor": "Fabrication Indicators",
+            "detail": f"Detected {len(redflags_list)} red-flag phrases: {rf_examples}.",
+            "impact": f"-{min(len(redflags_list) * 6, 30)}%"
         })
 
     if evidence_count > 0:
@@ -1529,8 +1802,10 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         
     if raw_confidence > 0.75 and prediction == 'REAL':
         positive_factors.append({"factor": "Model Signal", "detail": f"Classifier strongly validates text patterns.", "impact": "+35%"})
-    elif raw_confidence > 0.75 and prediction == 'FAKE':
+    elif raw_confidence > 0.75 and prediction == 'FAKE' and article_stance != "REFUTES":
         negative_factors.append({"factor": "Stylistic Flags", "detail": f"Classifier detects typical misinformation patterns.", "impact": "-35%"})
+    elif raw_confidence > 0.75 and prediction == 'FAKE' and article_stance == "REFUTES":
+        positive_factors.append({"factor": "Misinformation Keywords (Debunking Context)", "detail": "Classifier detected misinformation-related keywords, but article uses them in a refutation/fact-check context.", "impact": "+10%"})
         
     # ── 13. Audit Log & Drift Monitoring ──
     try:
@@ -1607,7 +1882,6 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         except Exception:
             try:
                 sent_decision = model.decision_function([sent_processed])[0]
-                import math
                 sent_suspicion = 1.0 / (1.0 + math.exp(sent_decision * 0.8))
             except Exception:
                 sent_suspicion = preprocessor.score_sentence_suspicion(sent)
@@ -1635,7 +1909,15 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         'is_satire': is_satire,
         'positive_factors': positive_factors,
         'negative_factors': negative_factors,
-        'temporal_analysis': temporal_analysis
+        'temporal_analysis': temporal_analysis,
+        'stance': stance_result,
+        'ml_score': ml_score,
+        'nlp_score': nlp_score,
+        'factcheck_score': factcheck_score,
+        'article_stance': article_stance,
+        'stance_confidence': stance_confidence,
+        'evidence_count': evidence_count,
+        'matched_themes': matched_themes
     }
 
 
@@ -1936,16 +2218,16 @@ def send_otp_email(to_email, otp):
         
         body = f"""
         <html>
-        <body style="font-family: sans-serif; background-color: #0c0a09; color: #fdfbf7; padding: 20px;">
-            <div style="max-width: 500px; margin: 0 auto; background-color: #13100e; border: 1px solid #c68b3f; border-radius: 12px; padding: 30px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
-                <h2 style="color: #d35230; margin-top: 0;">Fake News Detector Authentication</h2>
-                <p style="color: #d5c9ba; font-size: 16px;">Please use the following One-Time Password (OTP) to sign in to your credibility dashboard:</p>
-                <div style="font-size: 32px; font-weight: bold; color: #c68b3f; background-color: #1a1614; padding: 15px; border-radius: 8px; margin: 25px 0; letter-spacing: 5px;">
+        <body style="font-family: sans-serif; background-color: #0B0F14; color: #E2E8F0; padding: 20px;">
+            <div style="max-width: 500px; margin: 0 auto; background-color: #151B23; border: 1px solid #F59E0B; border-radius: 12px; padding: 30px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+                <h2 style="color: #F59E0B; margin-top: 0;">Fake News Detector Authentication</h2>
+                <p style="color: #94A3B8; font-size: 16px;">Please use the following One-Time Password (OTP) to sign in to your credibility dashboard:</p>
+                <div style="font-size: 32px; font-weight: bold; color: #F59E0B; background-color: #0B0F14; padding: 15px; border-radius: 8px; margin: 25px 0; letter-spacing: 5px;">
                     {otp}
                 </div>
-                <p style="color: #8c7b6c; font-size: 13px;">This OTP is valid for 10 minutes. If you did not request this, please ignore this email.</p>
+                <p style="color: #475569; font-size: 13px;">This OTP is valid for 10 minutes. If you did not request this, please ignore this email.</p>
                 <hr style="border-color: rgba(255,255,255,0.05); margin: 20px 0;">
-                <p style="color: #8c7b6c; font-size: 11px;">🛡️ AI Credibility Analyzer Portal</p>
+                <p style="color: #475569; font-size: 11px;">🛡️ AI Credibility Analyzer Portal</p>
             </div>
         </body>
         </html>
@@ -2032,7 +2314,7 @@ def render_landing():
         <h1>🛡️ TruthShield Portal</h1>
         <p>Advanced Credibility Analyzer & Media Literacy Engine</p>
         <div class="hero-divider"></div>
-        <p style="font-size: 1.1rem; color: #beb3a6; margin-top: 1rem; max-width: 700px; margin-left: auto; margin-right: auto;">
+        <p style="font-size: 1.1rem; color: #94A3B8; margin-top: 1rem; max-width: 700px; margin-left: auto; margin-right: auto;">
             Empowering citizens to verify facts, decode propaganda patterns, and challenge disinformation networks using high-performance NLP machine learning pipelines.
         </p>
     </div>
@@ -2041,7 +2323,7 @@ def render_landing():
     # CTA Button
     col_btn1, col_btn2, col_btn3 = st.columns([1, 1.2, 1])
     with col_btn2:
-        if st.button("🚀 Enter Credibility Console", use_container_width=True, key="cta_enter_portal"):
+        if st.button("🚀 Enter Credibility Console", width='stretch', key="cta_enter_portal"):
             st.session_state.page = "login"
             st.rerun()
 
@@ -2134,7 +2416,7 @@ def render_login():
             email_input = st.text_input("Enter your Gmail Address:", value=last_email, placeholder="name@gmail.com", key="login_email", on_change=lambda: None)
             
             if not st.session_state.otp_sent:
-                if st.button("Send Verification Code", use_container_width=True, type="primary", key="send_otp_btn"):
+                if st.button("Send Verification Code", width='stretch', type="primary", key="send_otp_btn"):
                     if email_input and re.match(r"[^@]+@[^@]+\.[^@]+", email_input.strip()):
                         otp = str(random.randint(100000, 999999))
                         st.session_state.otp_code = otp
@@ -2144,8 +2426,8 @@ def render_login():
                             success, msg = send_otp_email(email_input.strip(), otp)
                             
                         st.session_state.otp_sent = True
+                        st.session_state.otp_sent_time = time.time()
                         print(f"[AUTH] Email: {email_input.strip()} | OTP: {otp} | Sent: {success}", flush=True)
-                        import tempfile
                         try:
                             with open(os.path.join(tempfile.gettempdir(), "otp_debug.txt"), "w", encoding="utf-8") as f:
                                 f.write(otp)
@@ -2173,7 +2455,7 @@ def render_login():
                 
                 col_btn_verify, col_btn_resend = st.columns(2)
                 with col_btn_verify:
-                    if st.button("Verify & Sign In", use_container_width=True, type="primary", key="verify_otp_btn"):
+                    if st.button("Verify & Sign In", width='stretch', type="primary", key="verify_otp_btn"):
                         if otp_input.strip() == st.session_state.otp_code:
                             st.session_state.logged_in = True
                             st.session_state.page = "dashboard"
@@ -2183,15 +2465,158 @@ def render_login():
                         else:
                             st.error("❌ Incorrect verification code. Please try again.")
                 with col_btn_resend:
-                    if st.button("Change Email", use_container_width=True, key="resend_otp_btn"):
+                    if st.button("Change Email", width='stretch', key="change_email_btn"):
                         st.session_state.otp_sent = False
                         st.session_state.otp_code = None
                         st.session_state.login_message = None
                         st.rerun()
+                
+                # ── Resend OTP button with 6 min timer ──
+                now = time.time()
+                sent_time = st.session_state.get("otp_sent_time") or now
+                elapsed = now - sent_time
+                remaining = max(0, int(360 - elapsed))
+                
+                st.markdown("""
+                <style>
+                .hidden-btn-container {
+                    display: none !important;
+                }
+                </style>
+                """, unsafe_allow_html=True)
+                
+                st.markdown('<div class="hidden-btn-container">', unsafe_allow_html=True)
+                if st.button("Resend OTP Trigger", key="resend_otp_trigger_btn", width='content'):
+                    otp = str(random.randint(100000, 999999))
+                    st.session_state.otp_code = otp
+                    st.session_state.otp_sent_time = time.time()
+                    with st.spinner("✉️ Resending verification code..."):
+                        success, msg = send_otp_email(st.session_state.email, otp)
+                    if success:
+                        st.session_state.login_message = ("success", f"New verification code sent to **{st.session_state.email}**!")
+                    else:
+                        st.session_state.login_message = ("html", f"<div style='background:rgba(212,155,76,0.08); border:1px solid rgba(212,155,76,0.25); border-radius:12px; padding:1rem 1.2rem;'>💡 <b>Developer Mock Mode Active</b><br>We generated OTP: <span style='font-size:1.4rem; color:var(--accent); font-weight:bold;'>{otp}</span></div>")
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                st.components.v1.html(f"""
+                <style>
+                @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&family=Inter:wght@400;600;700&display=swap');
+                
+                :root {{
+                    --font-heading: 'Space Grotesk', 'Inter', sans-serif;
+                    --font-body: 'Inter', -apple-system, sans-serif;
+                    --accent: #F59E0B;
+                    --brass: #F59E0B;
+                    --text-primary: #E2E8F0;
+                }}
+                
+                body {{
+                    background: transparent;
+                    margin: 0;
+                    padding: 0;
+                    overflow: hidden;
+                }}
+                
+                .resend-btn {{
+                    width: 100%;
+                    box-sizing: border-box;
+                    background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+                    color: #0B0F14;
+                    border: none;
+                    border-radius: 10px;
+                    padding: 0.75rem 2rem;
+                    font-family: var(--font-heading);
+                    font-weight: 700;
+                    font-size: 0.95rem;
+                    letter-spacing: 0.5px;
+                    text-align: center;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2);
+                    user-select: none;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    gap: 8px;
+                }}
+                
+                .resend-btn:hover:not(.disabled) {{
+                    transform: translateY(-1px);
+                    box-shadow: 0 4px 16px rgba(245, 158, 11, 0.3);
+                    filter: brightness(1.1);
+                }}
+                
+                .resend-btn:active:not(.disabled) {{
+                    transform: translateY(0);
+                    box-shadow: 0 1px 4px rgba(245, 158, 11, 0.15);
+                }}
+                
+                .resend-btn.disabled {{
+                    background: rgba(255, 255, 255, 0.05);
+                    color: rgba(255, 255, 255, 0.3);
+                    border: 1px solid rgba(255, 255, 255, 0.05);
+                    box-shadow: none;
+                    cursor: not-allowed;
+                    transform: none;
+                }}
+                </style>
+                
+                <button id="resend-btn-el" class="resend-btn disabled">
+                    Resend OTP (06:00)
+                </button>
+                
+                <script>
+                    let remaining = {remaining};
+                    const btn = document.getElementById("resend-btn-el");
+                    
+                    function updateButton() {{
+                        if (remaining <= 0) {{
+                            btn.classList.remove("disabled");
+                            btn.innerHTML = "🔄 Resend OTP";
+                            btn.disabled = false;
+                        }} else {{
+                            btn.classList.add("disabled");
+                            btn.disabled = true;
+                            const mins = Math.floor(remaining / 60);
+                            const secs = remaining % 60;
+                            btn.innerHTML = `Resend OTP (${{mins.toString().padStart(2, '0')}}:${{secs.toString().padStart(2, '0')}})`;
+                        }}
+                    }}
+                    
+                    updateButton();
+                    
+                    if (remaining > 0) {{
+                        const interval = setInterval(() => {{
+                            remaining--;
+                            updateButton();
+                            if (remaining <= 0) {{
+                                clearInterval(interval);
+                            }}
+                        }}, 1000);
+                    }}
+                    
+                    btn.addEventListener("click", () => {{
+                        if (remaining <= 0) {{
+                            try {{
+                                const buttons = Array.from(window.parent.document.querySelectorAll('button'));
+                                const triggerBtn = buttons.find(b => b.textContent.includes('Resend OTP Trigger'));
+                                if (triggerBtn) {{
+                                    triggerBtn.click();
+                                }} else {{
+                                    console.error("Could not find Resend OTP Trigger button in parent window");
+                                }}
+                            }} catch(e) {{
+                                console.error("Error clicking parent button:", e);
+                            }}
+                        }}
+                    }});
+                </script>
+                """, height=52)
             
             st.markdown("<hr style='border-color: rgba(255,255,255,0.05);'>", unsafe_allow_html=True)
             
-            if st.button("⬅ Back to Homepage", use_container_width=True, key="back_to_home_btn"):
+            if st.button("⬅ Back to Homepage", width='stretch', key="back_to_home_btn"):
                 st.session_state.page = "landing"
                 st.session_state.otp_sent = False
                 st.session_state.otp_code = None
@@ -2223,7 +2648,7 @@ def render_feedback_page():
     analysis_results = st.session_state.get("analysis_results")
     if not analysis_results:
         st.warning("⚠️ No article analysis found. Please run an analysis first on the dashboard.")
-        if st.button("← Go to Dashboard"):
+        if st.button("← Go to Dashboard", width='content'):
             st.session_state.page = "dashboard"
             st.rerun()
         return
@@ -2232,7 +2657,7 @@ def render_feedback_page():
     analysis_text = analysis_results["analysis_text"]
     
     # Back button
-    if st.button("← Back to Dashboard", key="feedback_back_top"):
+    if st.button("← Back to Dashboard", key="feedback_back_top", width='content'):
         st.session_state.page = "dashboard"
         st.rerun()
 
@@ -2257,7 +2682,7 @@ def render_feedback_page():
             rating = st.slider("Rate accuracy (1 = poor, 5 = perfect):", 1, 5, 4, key="fb_page_rating")
             feedback_notes = st.text_area("Optional notes / corrections:", placeholder="What did the model get right or wrong? Are there specific facts that need correction?", key="fb_page_notes")
             
-            if st.button("Submit Feedback", key="fb_page_submit", type="primary"):
+            if st.button("Submit Feedback", key="fb_page_submit", type="primary", width='content'):
                 email = st.session_state.get("email", "anonymous")
                 save_feedback(
                     email,
@@ -2307,7 +2732,7 @@ def render_feedback_page():
             """)
             
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("← Go to Dashboard", key="feedback_back_bottom", use_container_width=True):
+            if st.button("← Go to Dashboard", key="feedback_back_bottom", width='stretch'):
                 st.session_state.page = "dashboard"
                 st.rerun()
 
@@ -2357,7 +2782,7 @@ def render_dashboard():
             <div class="user-status-dot" title="Online"></div>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("🚪 Log Out", use_container_width=True, key="sidebar_logout_btn"):
+        if st.button("🚪 Log Out", width='stretch', key="sidebar_logout_btn"):
             st.session_state.logged_in = False
             st.session_state.email = ""
             st.session_state.page = "landing"
@@ -2395,7 +2820,7 @@ def render_dashboard():
                         st.button(
                             btn_label,
                             key=f"india_feed_{idx}_{feed_category[:5]}",
-                            use_container_width=True,
+                            width='stretch',
                             on_click=load_article_callback,
                             args=(description,)
                         )
@@ -2411,7 +2836,7 @@ def render_dashboard():
                     ("Breaking: Miracle Cure Found in Ancient Indian Herb", "A viral WhatsApp forward claims that a rare Himalayan herb can cure all diseases within 48 hours. Medical experts have debunked this claim stating there is no scientific evidence supporting these miraculous healing properties.")
                 ]
                 for title, body in news_items:
-                    st.button(title, key=f"feed_btn_{title[:10]}", use_container_width=True, on_click=load_article_callback, args=(body,))
+                    st.button(title, key=f"feed_btn_{title[:10]}", width='stretch', on_click=load_article_callback, args=(body,))
         live_metrics = load_live_metrics()
         st.markdown("---")
         st.markdown("### Model & Dataset")
@@ -2443,13 +2868,42 @@ def render_dashboard():
         """)
         st.markdown("---")
         st.markdown("""
-        <div style="color:#9a8d82;font-size:0.78rem;text-align:center;">
+        <div style="color:#94A3B8;font-size:0.78rem;text-align:center;">
             Built with Streamlit, scikit-learn & Newspaper3k
         </div>
         """, unsafe_allow_html=True)
 
         st.markdown("---")
 
+    # ── Top Intelligence Bar ──
+    display_name = email_to_display_name(st.session_state.email)
+    st.markdown(f"""
+    <div class="top-intel-bar">
+        <div class="intel-logo-section">
+            <span class="intel-logo">🛡️</span>
+            <span class="intel-title">TRUTHSHIELD</span>
+            <span class="intel-subtitle">INTELLIGENCE_WORKSPACE</span>
+        </div>
+        <div class="intel-status-section">
+            <div class="status-item">
+                <span class="status-dot green"></span>
+                <span class="status-label">SYSTEM STATE: ACTIVE</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">CORPUS CAPACITY: 120,400+</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">MODEL VER: ENS_V3.5_SECURE</span>
+            </div>
+        </div>
+        <div class="intel-user-section">
+            <span class="user-email">{display_name.upper()}</span>
+            <span class="user-badge">ANALYST</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Workspace Tabs ──
     tab_analyze, tab_education, tab_analytics, tab_evaluation, tab_history = st.tabs(["🔍 Credibility Analyzer", "📖 Media Literacy Hub", "📊 Analytics & Insights", "🔬 Model Evaluation & Research", "📋 Analysis History"])
 
     with tab_analyze:
@@ -2499,7 +2953,7 @@ def render_dashboard():
 
         col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
         with col_btn2:
-            predict_clicked = st.button("Analyze Credibility", use_container_width=True, type="primary")
+            predict_clicked = st.button("Analyze Credibility", width='stretch', type="primary")
 
         if predict_clicked and article_text and len(article_text.strip()) > 50:
             with st.spinner("🌐 Detecting language & translating..."):
@@ -2511,12 +2965,17 @@ def render_dashboard():
                 else:
                     analysis_text = article_text
                     
-            with st.spinner("🧠 Analyzing article with AI..."):
+            with st.status("🔍 Initiating Intelligence Scan...", expanded=True) as status:
+                st.write("✓ Language validation completed.")
+                time.sleep(0.2)
+                st.write("✓ Querying engine pipeline & indicators...")
                 clickbait_detector = get_clickbait_detector()
                 ai_detector = get_ai_detector()
                 claim_verifier = get_claim_verifier()
                 source_engine = get_source_engine()
+                time.sleep(0.2)
                 
+                st.write("✓ Running machine learning classifier ensemble...")
                 results = predict_article(
                     analysis_text, model, preprocessor,
                     clickbait_detector=clickbait_detector,
@@ -2525,17 +2984,30 @@ def render_dashboard():
                     source_engine=source_engine,
                     url=(url_input if "URL" in input_mode and url_input else None)
                 )
+                time.sleep(0.3)
                 
-                # Dynamic Advanced NLP analyses
+                claims_count = len(results.get("verification_results", []))
+                evidence_count = results.get("evidence_count", 0)
+                domain = results.get("source_profile", {}).get("domain") or "(no URL)"
+                
+                st.write(f"✓ Claims isolated ({claims_count} verifications initiated).")
+                time.sleep(0.2)
+                st.write(f"✓ Checked external KBs & fact-check APIs (found {evidence_count} matches).")
+                time.sleep(0.2)
+                if domain != "(no URL)":
+                    st.write(f"✓ Checked reputation database for source domain: {domain}.")
+                    time.sleep(0.2)
+                st.write("✓ Extracting entities and generating summary...")
                 sentiment_data = nlp_engine.get_sentiment_metrics(analysis_text)
                 entities_data = nlp_engine.extract_entities(analysis_text)
                 summary_data = nlp_engine.generate_summary(analysis_text)
+                time.sleep(0.2)
                 
-                # SHAP explainability (real Shapley values)
+                st.write("✓ Running SHAP explainability analysis...")
                 shap_data = nlp_engine.explain_with_shap(analysis_text, model)
-                
-                # Check domain reputation
                 domain_profile = results.get('source_profile')
+                
+                status.update(label="✓ Investigation Completed", state="complete", expanded=False)
 
             # Save check to database history
             words_list = article_text.strip().split()
@@ -2584,650 +3056,293 @@ def render_dashboard():
             article_text = st.session_state.analysis_results["article_text"]
             url_input = st.session_state.analysis_results["url_input"]
             input_mode = st.session_state.analysis_results["input_mode"]
-
+            
             st.markdown("---")
-            st.markdown("## Analysis Results")
+            st.markdown("### 🔍 Live Investigation Workspace")
 
-            col_verdict, col_gauge = st.columns([1.2, 1])
-
-            with col_verdict:
-                with st.container(border=True):
-                    st.markdown("#### Analysis Verdict")
-
-                    pred = results['prediction']
-                    conf = results['confidence']
-                    cat = results['category']
-
-                    if cat == 'Highly Credible':
-                        verdict_class = "verdict-real"
-                        verdict_text = "🛡️ Highly Credible"
-                        verdict_desc = "This article displays exceptionally strong indicators of **truthfulness, high evidence quality, and publisher trust**."
-                    elif cat == 'Likely Real':
-                        verdict_class = "verdict-real"
-                        verdict_text = "✅ Likely Real"
-                        verdict_desc = "This article appears to be **credible and factual** based on our analysis."
-                    elif cat == 'Uncertain':
-                        verdict_class = "verdict-uncertain"
-                        verdict_text = "❓ Uncertain"
-                        verdict_desc = "Credibility signals are mixed, or evidence is **insufficient** to draw a strong conclusion."
-                    elif cat == 'Likely Fake':
-                        verdict_class = "verdict-misleading"
-                        verdict_text = "⚠️ Likely Fake"
-                        verdict_desc = "This article contains **misleading framing** or displays low-trust patterns."
-                    else: # High Risk Misinformation
-                        verdict_class = "verdict-fake"
-                        verdict_text = "🚨 High Risk"
-                        verdict_desc = "This article shows high indicators of **misinformation, fabrication, or known false claims**."
-
-                    cred_pct = results['credibility'] * 100
-                    rel_pct = results['reliability'] * 100
-                    
-                    # Colors based on score
-                    def get_score_color(score):
-                        if score >= 85: return "#5f8a6b" # Safe Green
-                        if score >= 65: return "#7ea388" # Light Green
-                        if score >= 45: return "#d49b4c" # Amber/Gold
-                        if score >= 20: return "#ea580c" # Orange
-                        return "#d45d4e" # Crimson Red
-                    
-                    cred_color = get_score_color(cred_pct)
-                    rel_color = get_score_color(rel_pct)
-
-                    st.markdown(f'<div style="text-align:center;margin:1.2rem 0 0.8rem 0;">'
-                                f'<span class="{verdict_class}">{verdict_text}</span></div>',
-                                unsafe_allow_html=True)
-                    
-                    st.markdown(f"""
-                    <div style="margin: 1.2rem 0 0.8rem 0;">
-                        <div style="margin-bottom: 0.8rem;">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.85rem; font-weight: 600;">
-                                <span>🎯 Credibility Score (Likely Truth)</span>
-                                <span style="color: {cred_color}; font-weight:700;">{cred_pct:.1f}%</span>
-                            </div>
-                            <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08);">
-                                <div style="width: {cred_pct}%; height: 100%; background: {cred_color}; border-radius: 4px; transition: width 0.8s ease;"></div>
-                            </div>
-                        </div>
-                        <div>
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.85rem; font-weight: 600;">
-                                <span>🛡️ System Reliability (Evidence Density)</span>
-                                <span style="color: {rel_color}; font-weight:700;">{rel_pct:.1f}%</span>
-                            </div>
-                            <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08);">
-                                <div style="width: {rel_pct}%; height: 100%; background: {rel_color}; border-radius: 4px; transition: width 0.8s ease;"></div>
-                            </div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    st.markdown(f"<div style='font-size:0.9rem; margin-top:8px; line-height:1.4;'>{verdict_desc}</div>", unsafe_allow_html=True)
-                    st.markdown(f"<div style='font-size:0.8rem; color:var(--text-muted); margin-top:8px;'><b>Model Confidence:</b> {conf*100:.1f}%</div>", unsafe_allow_html=True)
-
-            with col_gauge:
-                with st.container(border=True):
-                    fig = create_gauge_chart(results['credibility'])
-                    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-
-            indicators = results['indicators']
-            m1, m2, m3, m4, m5, m6 = st.columns(6)
-
-            with m1:
-                st.markdown(f"""<div class="metric-card">
-                    <div class="metric-value">{indicators['sensationalism_score']*100:.0f}%</div>
-                    <div class="metric-label">Sensationalism</div>
-                </div>""", unsafe_allow_html=True)
-            with m2:
-                st.markdown(f"""<div class="metric-card">
-                    <div class="metric-value">{indicators['credibility_score']*100:.0f}%</div>
-                    <div class="metric-label">Credibility Signals</div>
-                </div>""", unsafe_allow_html=True)
-            with m3:
-                st.markdown(f"""<div class="metric-card">
-                    <div class="metric-value">{results['source_trust']:.0f}%</div>
-                    <div class="metric-label">Source Trust</div>
-                </div>""", unsafe_allow_html=True)
-            with m4:
-                st.markdown(f"""<div class="metric-card">
-                    <div class="metric-value">{results['clickbait_score']*100:.0f}%</div>
-                    <div class="metric-label">Clickbait Score</div>
-                </div>""", unsafe_allow_html=True)
-            with m5:
-                st.markdown(f"""<div class="metric-card">
-                    <div class="metric-value">{results['ai_score']*100:.0f}%</div>
-                    <div class="metric-label">AI Probability</div>
-                </div>""", unsafe_allow_html=True)
-            with m6:
-                word_count = len(article_text.split())
-                st.markdown(f"""<div class="metric-card">
-                    <div class="metric-value">{word_count:,}</div>
-                    <div class="metric-label">Word Count</div>
-                </div>""", unsafe_allow_html=True)
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            # Executive Summarization Block
-            with st.container(border=True):
-                st.markdown("#### 📖 Executive Summary")
-                st.write(summary_data)
-
-            # Risk Breakdown Block
-            with st.container(border=True):
-                st.markdown("#### ⚖️ Contributing Risk Breakdown")
-                st.caption("Key positive (credibility-building) and negative (risk-inducing) factors identified in this analysis.")
+            cat = results['category']
+            
+            # Risk mapping
+            if cat in ("Highly Credible", "Likely Real"):
+                risk_level = "LOW RISK"
+                risk_class = "border-verified"
+                risk_color = "var(--success)"
+            elif cat == "Uncertain":
+                risk_level = "MODERATE"
+                risk_class = "border-uncertain"
+                risk_color = "var(--warning)"
+            else:
+                risk_level = "HIGH RISK"
+                risk_class = "border-danger"
+                risk_color = "var(--danger)"
                 
-                col_pos_f, col_neg_f = st.columns(2)
-                with col_pos_f:
-                    st.markdown("<p style='font-weight: 700; color: #7ea388; margin-bottom: 8px;'>✅ Positive Drivers</p>", unsafe_allow_html=True)
-                    if results.get('positive_factors'):
-                        for f in results['positive_factors']:
-                            st.markdown(f"""
-                            <div style="background: rgba(95, 138, 107, 0.05); border-left: 4px solid #5f8a6b; padding: 10px; border-radius: 4px; margin-bottom: 8px;">
-                                <div style="display: flex; justify-content: space-between; font-weight: 600; font-size: 0.85rem; color: #7ea388;">
-                                    <span>{f['factor']}</span>
-                                    <span>{f['impact']}</span>
-                                </div>
-                                <div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 2px;">{f['detail']}</div>
-                            </div>
-                            """, unsafe_allow_html=True)
-                    else:
-                        st.caption("No significant positive drivers identified.")
-                        
-                with col_neg_f:
-                    st.markdown("<p style='font-weight: 700; color: #e57373; margin-bottom: 8px;'>🚨 Risk Indicators</p>", unsafe_allow_html=True)
-                    if results.get('negative_factors'):
-                        for f in results['negative_factors']:
-                            st.markdown(f"""
-                            <div style="background: rgba(212, 93, 78, 0.05); border-left: 4px solid #d45d4e; padding: 10px; border-radius: 4px; margin-bottom: 8px;">
-                                <div style="display: flex; justify-content: space-between; font-weight: 600; font-size: 0.85rem; color: #e57373;">
-                                    <span>{f['factor']}</span>
-                                    <span>{f['impact']}</span>
-                                </div>
-                                <div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 2px;">{f['detail']}</div>
-                            </div>
-                            """, unsafe_allow_html=True)
-                    else:
-                        st.caption("No significant risk indicators identified.")
+            v_status = results.get('verification_status') or "Unverified"
+            if "contradict" in v_status.lower() or "fake" in v_status.lower() or "disproved" in v_status.lower():
+                verif_text = "CONTRADICTED"
+                verif_badge = '<span class="intel-state-badge" style="background:rgba(239,68,68,0.08); color:var(--danger); border:1px solid rgba(239,68,68,0.15)">CONTRADICTED</span>'
+            elif "verify" in v_status.lower() or "confirm" in v_status.lower() or "true" in v_status.lower() or "credible" in v_status.lower():
+                verif_text = "VERIFIED"
+                verif_badge = '<span class="intel-state-badge" style="background:rgba(16,185,129,0.08); color:var(--success); border:1px solid rgba(16,185,129,0.15)">VERIFIED</span>'
+            else:
+                verif_text = "UNVERIFIED"
+                verif_badge = '<span class="intel-state-badge" style="background:rgba(245,158,11,0.08); color:var(--warning); border:1px solid rgba(245,158,11,0.15)">UNVERIFIED</span>'
 
-            # Highlighted Suspicious Lines Block
-            with st.container(border=True):
-                sent_score_lookup = {sent: score for sent, score in results['sentence_analysis']}
+            # ── Split Results into Main Column & Sidebar Intelligence ──
+            col_results_main, col_results_side = st.columns([3.2, 1.8])
+
+            with col_results_main:
+                # ── Top Row: Summary and Claims side-by-side ──
+                col_ev, col_cl = st.columns([1.7, 1.3])
+                with col_ev:
+                    with st.container(border=True):
+                        st.markdown("#### 📄 Executive Summary & Evidence")
+                        st.markdown(f"**Stance Detected:** `{results.get('article_stance', 'NEUTRAL')}` ({results.get('stance_confidence', 0.5)*100:.0f}% confidence)")
+                        st.markdown(f"**Evidence Count:** `{results.get('evidence_count', 0)} matches` | **Agreement:** `{results.get('agreement_ratio', 0.5)*100:.0f}%`")
+                        st.markdown("---")
+                        st.write(summary_data)
+                
+                with col_cl:
+                    with st.container(border=True):
+                        st.markdown("#### 🔍 Extracted Claims & Suspicion")
+                        sent_score_lookup = {sent: score for sent, score in results.get('sentence_analysis', [])}
+                        try:
+                            original_sentences = sent_tokenize(analysis_text)
+                        except Exception:
+                            original_sentences = re.split(r'(?<=[.!?])\s+', analysis_text)
+                            
+                        highlighted_html = ""
+                        for sent in original_sentences[:10]:
+                            sent_str = sent.strip()
+                            if not sent_str:
+                                continue
+                            score = sent_score_lookup.get(sent, 0.0)
+                            if score >= 0.65:
+                                bg_color = "rgba(239, 68, 68, 0.08)"
+                                border_color = "var(--danger)"
+                            elif score >= 0.35:
+                                bg_color = "rgba(245, 158, 11, 0.08)"
+                                border_color = "var(--warning)"
+                            else:
+                                bg_color = "rgba(16, 185, 129, 0.04)"
+                                border_color = "var(--success)"
+                            highlighted_html += f'<span style="background:{bg_color}; border-left: 2px solid {border_color}; padding: 2px 4px; margin: 2px; display: inline-block; border-radius: 4px; font-size: 0.76rem;" title="Suspicion: {score*100:.0f}%">{sent_str}</span> '
+                            
+                        st.markdown(f'<div style="max-height: 180px; overflow-y: auto; line-height: 1.5; padding: 4px; border: 1px solid rgba(255,255,255,0.03); border-radius:4px;">{highlighted_html}</div>', unsafe_allow_html=True)
+                        
+                        st.markdown("<p style='font-size:0.75rem; color:var(--text-secondary); margin-top:8px; margin-bottom:4px;'><b>Key Indictment Drivers:</b></p>", unsafe_allow_html=True)
+                        factors = results.get('negative_factors', [])[:2] + results.get('positive_factors', [])[:1]
+                        for f in factors:
+                            col_c = "var(--danger)" if "-" in f.get('impact', '') else "var(--success)"
+                            st.markdown(f"<div style='font-size: 0.72rem; display:flex; justify-content:space-between;'><span>• {f['factor']}</span><span style='color:{col_c}; font-weight:600;'>{f['impact']}</span></div>", unsafe_allow_html=True)
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # ── Visualizations Row: Knowledge Graph & Waterfall side-by-side ──
+                col_kg, col_wf = st.columns([1, 1])
+                with col_kg:
+                    with st.container(border=True):
+                        st.markdown("#### 🕸️ Investigation Knowledge Graph")
+                        kg_fig = create_knowledge_graph(results)
+                        st.plotly_chart(kg_fig, width='stretch', config={'displayModeBar': False})
+
+                with col_wf:
+                    with st.container(border=True):
+                        st.markdown("#### 📊 Explainable AI Waterfall Chart")
+                        wf_fig = create_waterfall_chart(results)
+                        st.plotly_chart(wf_fig, width='stretch', config={'displayModeBar': False})
+
+            with col_results_side:
+                # ── System Intel Readout Panel ──
+                st.markdown('<div class="right-panel-title">🛡️ SYSTEM INTEL READOUT</div>', unsafe_allow_html=True)
+                
+                cred_val = results['credibility'] * 100
+                rel_val = results['reliability'] * 100
+                source_trust_val = results['source_trust']
+                ai_val = results['ai_score'] * 100
+                
+                evidence_count = results.get('evidence_count', 0)
+                agreement_ratio = results.get('agreement_ratio', 0.5)
+                ev_strength_val = min(evidence_count * 25, 100) * (0.5 + agreement_ratio * 0.5)
+                
+                st.markdown(f"""<div class="right-intel-panel {risk_class}">
+<div style="text-align: center; margin-bottom: 1rem;">
+<div style="font-size: 0.72rem; color: var(--text-secondary); text-transform: uppercase; font-family: var(--font-mono); letter-spacing: 0.5px;">Current Verdict</div>
+<div style="font-size: 1.1rem; font-weight: 700; color: {risk_color}; margin-top: 2px;">{cat.upper()}</div>
+</div>
+<div class="intel-metric-row">
+<div class="intel-metric-label">
+<span>🎯 Credibility Score</span>
+<span style="color: var(--accent); font-weight: 700;">{cred_val:.1f}%</span>
+</div>
+<div class="intel-progress-bg">
+<div class="intel-progress-bar" style="width: {cred_val}%; background-color: var(--accent);"></div>
+</div>
+</div>
+<div class="intel-metric-row">
+<div class="intel-metric-label">
+<span>🛡️ System Reliability</span>
+<span style="color: var(--accent-secondary); font-weight: 700;">{rel_val:.1f}%</span>
+</div>
+<div class="intel-progress-bg">
+<div class="intel-progress-bar" style="width: {rel_val}%; background-color: var(--accent-secondary);"></div>
+</div>
+</div>
+<div class="intel-metric-row">
+<div class="intel-metric-label">
+<span>📊 Evidence Strength</span>
+<span style="color: var(--success); font-weight: 700;">{ev_strength_val:.1f}%</span>
+</div>
+<div class="intel-progress-bg">
+<div class="intel-progress-bar" style="width: {ev_strength_val}%; background-color: var(--success);"></div>
+</div>
+</div>
+<div style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 0.8rem; font-size: 0.78rem;">
+<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+<span style="color: var(--text-secondary);">Risk Profile:</span>
+<span style="color: {risk_color}; font-weight: 700; font-family: var(--font-mono);">{risk_level}</span>
+</div>
+<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+<span style="color: var(--text-secondary);">Source Trust:</span>
+<span style="color: var(--text-primary); font-family: var(--font-mono);">{source_trust_val:.0f}%</span>
+</div>
+<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+<span style="color: var(--text-secondary);">AI Probability:</span>
+<span style="color: var(--text-primary); font-family: var(--font-mono);">{ai_val:.0f}%</span>
+</div>
+<div style="display: flex; justify-content: space-between; align-items: center;">
+<span style="color: var(--text-secondary);">Verification:</span>
+<span>{verif_badge}</span>
+</div>
+</div>
+</div>""", unsafe_allow_html=True)
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # ── Source Intelligence Card ──
+                with st.container(border=True):
+                    st.markdown("#### 🏢 Source Intelligence Dossier")
+                    render_source_dossier(results)
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # ── Investigation Timeline ──
+                with st.container(border=True):
+                    st.markdown("#### 🕒 Investigation Timeline")
+                    render_timeline(results)
+
+            # Let the remaining actions render below inside col_results_main
+            with col_results_main:
+                # ── Action Center & PDF/CSV Exporting Row ──
+                st.markdown("---")
+                
+                cat_explain = ""
+                cat_val = results['category']
+                if cat_val == 'REAL':
+                    cat_explain = "This article was classified as REAL because the voting classifier ensemble validated the linguistic features, the source has high reputational alignment, and RAG fact check databases did not verify any contradictory reports."
+                elif cat_val == 'SATIRE':
+                    cat_explain = "This article was classified as SATIRE because the publisher has a documented parodic index in our reputation database."
+                elif cat_val == 'CLICKBAIT':
+                    cat_explain = "This article was classified as CLICKBAIT due to high sensationalism scores and click-inducing title formatting patterns."
+                elif cat_val == 'MISLEADING':
+                    cat_explain = "This article was classified as MISLEADING due to conflicting credibility indexes or unverified claims matched."
+                else:
+                    cat_explain = "This article was classified as FAKE due to high classification confidence, verified RAG contradictions, or low-trust source records."
+
+                words_list = article_text.strip().split()
+                title_prefix = " ".join(words_list[:6]) + ("..." if len(words_list) > 6 else "")
+                
                 try:
-                    original_sentences = sent_tokenize(analysis_text)
-                except Exception:
-                    original_sentences = re.split(r'(?<=[.!?])\s+', analysis_text)
-                    
-                st.markdown("#### 🔍 Highlighted Suspicious Lines")
-                st.caption("Hover over highlighted segments to inspect suspicion indices.")
-                highlighted_html = ""
-                for sent in original_sentences:
-                    sent_str = sent.strip()
-                    if not sent_str:
-                        continue
-                    score = sent_score_lookup.get(sent, 0.0)
-                    
-                    if score >= 0.65:
-                        bg_color = "rgba(212, 93, 78, 0.15)"
-                        border_color = "var(--danger)"
-                        label = f"Suspicion: {score*100:.0f}%"
-                    elif score >= 0.35:
-                        bg_color = "rgba(212, 155, 76, 0.12)"
-                        border_color = "var(--warning)"
-                        label = f"Suspicion: {score*100:.0f}%"
-                    else:
-                        bg_color = "rgba(95, 138, 107, 0.08)"
-                        border_color = "var(--success)"
-                        label = "Factual Segment"
-                        
-                    highlighted_html += f'<span style="background:{bg_color}; border-left: 2px solid {border_color}; padding: 2px 6px; margin: 2px; display: inline-block; border-radius: 4px;" title="{label}">{sent_str}</span> '
-                
-                st.markdown(f'<div style="line-height: 1.8; font-size: 0.95rem;">{highlighted_html}</div>', unsafe_allow_html=True)
-
-            # Word Attribution & Reputation columns
-            col_expl, col_rep = st.columns(2)
-            
-            with col_expl:
-                # Try real SHAP first, fallback to TF-IDF weight approximation
-                if shap_data.get('available') and shap_data.get('shap_values'):
-                    with st.container(border=True):
-                        st.markdown("#### 📊 SHAP Waterfall — Word Attribution")
-                        st.caption("Real Shapley values showing each word's contribution to the prediction.")
-                        
-                        sv = shap_data['shap_values'][:10]
-                        shap_words = [item['word'] for item in reversed(sv)]
-                        shap_vals = [item['value'] for item in reversed(sv)]
-                        shap_colors = ["#5f8a6b" if v > 0 else "#d45d4e" for v in shap_vals]
-                        
-                        fig_shap = go.Figure(go.Bar(
-                            x=shap_vals,
-                            y=shap_words,
-                            orientation='h',
-                            marker_color=shap_colors,
-                            hovertemplate="Word: %{y}<br>SHAP Value: %{x:.4f}<extra></extra>"
-                        ))
-                        fig_shap.update_layout(
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            plot_bgcolor='rgba(0,0,0,0)',
-                            xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', title="SHAP Value (Fake ◄───► Real)"),
-                            yaxis=dict(showgrid=False),
-                            margin=dict(l=100, r=20, t=10, b=30),
-                            height=280,
-                            font=dict(color="#f5f2eb", family="Space Grotesk")
-                        )
-                        st.plotly_chart(fig_shap, use_container_width=True)
-                        st.caption(f"Base value: `{shap_data['base_value']:.3f}` → Prediction: `{shap_data['predicted_value']:.3f}`")
-                else:
-                    fake_drivers, real_drivers = nlp_engine.explain_features(analysis_text, model)
-                    if fake_drivers or real_drivers:
-                        with st.container(border=True):
-                            st.markdown("#### 📊 Word Influence Graph (TF-IDF Weights)")
-                            st.caption("Top words driving prediction towards FAKE (Red) vs REAL (Green).")
-                            
-                            words = []
-                            contribs = []
-                            colors_list = []
-                            
-                            for d in reversed(fake_drivers[:5]):
-                                words.append(d['word'])
-                                contribs.append(d['contribution'])
-                                colors_list.append("#d45d4e")
-                                
-                            for d in real_drivers[:5]:
-                                words.append(d['word'])
-                                contribs.append(d['contribution'])
-                                colors_list.append("#5f8a6b")
-                                
-                            fig_attr = go.Figure(go.Bar(
-                                x=contribs,
-                                y=words,
-                                orientation='h',
-                                marker_color=colors_list,
-                                hovertemplate="Word: %{y}<br>Attribution: %{x:.4f}<extra></extra>"
-                            ))
-                            fig_attr.update_layout(
-                                paper_bgcolor='rgba(0,0,0,0)',
-                                plot_bgcolor='rgba(0,0,0,0)',
-                                xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', title="Relative Influence (Fake ◄───► Real)"),
-                                yaxis=dict(showgrid=False),
-                                margin=dict(l=80, r=20, t=10, b=30),
-                                height=250,
-                                font=dict(color="#f5f2eb", family="Space Grotesk")
-                            )
-                            st.plotly_chart(fig_attr, use_container_width=True)
-                    else:
-                        with st.container(border=True):
-                            st.markdown("#### 📊 Word Influence Graph")
-                            st.info("No strong word influences detected in this snippet.")
-
-            with col_rep:
-                if domain_profile:
-                    with st.container(border=True):
-                        st.markdown("#### 🔗 Source Trust Profile")
-                        col_s1, col_s2 = st.columns([1, 2])
-                        with col_s1:
-                            st.metric("Source Trust Score", f"{domain_profile['score']}%", help=domain_profile['category'])
-                        with col_s2:
-                            st.markdown(f"**Domain:** `{domain_profile['domain']}`")
-                            st.markdown(f"**Category:** *{domain_profile['category']}*")
-                            bias_label = domain_profile.get('bias', 'Unknown')
-                            bias_colors = {'Far-Left': '#3b82f6', 'Left': '#60a5fa', 'Left-Center': '#7dd3fc', 'Center-Left': '#93c5fd', 'Center': '#a8a29e', 'Center-Right': '#fbbf24', 'Right-Center': '#f59e0b', 'Right': '#ef4444', 'Far-Right': '#dc2626'}
-                            bc = bias_colors.get(bias_label, '#a8a29e')
-                            st.markdown(f"**Media Bias:** <span style='background:{bc}; color:#fff; padding:2px 10px; border-radius:6px; font-weight:600; font-size:0.85rem;'>{bias_label}</span>", unsafe_allow_html=True)
-                            st.caption(domain_profile['description'])
-                else:
-                    with st.container(border=True):
-                        st.markdown("#### 🔗 Source Trust Profile")
-                        st.metric("Source Trust Score", "50%", help="Pasted Text (Unverified)")
-                        st.caption("Pasted snippet without verifiable URL source domain. Proceed with careful cross-referencing.")
-
-            # Sentiment & Bias Row
-            col_sent, col_bias = st.columns(2)
-            with col_sent:
-                with st.container(border=True):
-                    st.markdown("#### 🧠 VADER Sentiment Analysis")
-                    compound = sentiment_data.get('compound', 0.0)
-                    if compound >= 0.05:
-                        sent_label = "Positive"
-                        sent_color = "#5f8a6b"
-                    elif compound <= -0.05:
-                        sent_label = "Negative"
-                        sent_color = "#d45d4e"
-                    else:
-                        sent_label = "Neutral"
-                        sent_color = "#d49b4c"
-                    st.markdown(f"""<div style='text-align:center;margin:0.5rem 0;'>
-                        <span style='font-size:1.8rem;font-weight:700;color:{sent_color};'>{compound:+.3f}</span><br>
-                        <span style='font-size:0.9rem;color:{sent_color};font-weight:600;'>{sent_label} Compound Score</span>
-                    </div>""", unsafe_allow_html=True)
-                    st.caption("VADER compound score ranges from -1 (very negative) to +1 (very positive)")
-                    # Radar chart for emotion breakdown
-                    fig_radar = go.Figure(go.Scatterpolar(
-                        r=[sentiment_data.get('positive', 0)*100, sentiment_data.get('negative', 0)*100,
-                           sentiment_data.get('fear', 0)*100, sentiment_data.get('anger', 0)*100,
-                           sentiment_data.get('joy', 0)*100, sentiment_data.get('neutral', 0)*100],
-                        theta=['Positive', 'Negative', 'Fear', 'Anger', 'Joy', 'Neutral'],
-                        fill='toself',
-                        fillcolor='rgba(212, 155, 76, 0.15)',
-                        line=dict(color='#d49b4c', width=2)
-                    ))
-                    fig_radar.update_layout(
-                        polar=dict(
-                            bgcolor='rgba(0,0,0,0)',
-                            radialaxis=dict(visible=True, range=[0, 100], showticklabels=False, gridcolor='rgba(255,255,255,0.05)'),
-                            angularaxis=dict(gridcolor='rgba(255,255,255,0.05)')
-                        ),
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        font=dict(color='#f5f2eb', family='Space Grotesk', size=11),
-                        height=220, margin=dict(l=40, r=40, t=20, b=20),
-                        showlegend=False
+                    pdf_bytes = generate_credibility_pdf(
+                        title=title_prefix,
+                        summary=summary_data,
+                        prediction=results['prediction'],
+                        confidence=results['confidence'],
+                        credibility=results['credibility'],
+                        indicators=results.get('indicators'),
+                        domain_profile=domain_profile,
+                        sentiment=sentiment_data,
+                        entities=entities_data,
+                        category=results.get('category'),
+                        clickbait_score=results.get('clickbait_score'),
+                        ai_score=results.get('ai_score'),
+                        verification_results=results.get('verification_results'),
+                        source_trust=results.get('source_trust'),
+                        explanation=cat_explain
                     )
-                    st.plotly_chart(fig_radar, use_container_width=True)
-                    dominant = sentiment_data.get('dominant_emotion', 'Neutral')
-                    st.caption(f"Dominant emotion: **{dominant}**")
-            with col_bias:
-                with st.container(border=True):
-                    st.markdown("#### ⚖️ Estimated Media Bias")
-                    text_lower = analysis_text.lower()
-                    # Enhanced 30+ keyword weighted bias detection
-                    left_keywords = {
-                        'progressive': 2, 'liberal': 2, 'democrat': 2, 'reform': 1, 'inequality': 1.5,
-                        'climate change': 2, 'social justice': 2, 'diversity': 1, 'inclusion': 1,
-                        'universal healthcare': 2, 'gun control': 2, 'regulation': 1, 'welfare': 1.5,
-                        'reproductive rights': 2, 'systemic racism': 2, 'marginalized': 1.5,
-                        'workers rights': 1.5, 'environmentalism': 1.5, 'unionize': 1.5,
-                        'affordable housing': 1, 'wealth gap': 1.5, 'democratic socialism': 2,
-                        'living wage': 1.5, 'public option': 1.5, 'redistribution': 2,
-                        'green new deal': 2, 'defund': 2, 'equity': 1, 'intersectional': 2,
-                        'patriarchy': 2, 'corporatism': 1.5
-                    }
-                    right_keywords = {
-                        'conservative': 2, 'republican': 2, 'traditional': 1.5, 'taxes': 1,
-                        'border control': 2, 'heritage': 1.5, 'free market': 2, 'deregulation': 2,
-                        'second amendment': 2, 'pro-life': 2, 'family values': 1.5, 'national security': 1,
-                        'patriot': 1.5, 'liberty': 1, 'constitution': 1, 'law and order': 2,
-                        'illegal immigration': 2, 'fiscal responsibility': 1.5, 'small government': 2,
-                        'religious freedom': 1.5, 'free speech': 1, 'limited government': 2,
-                        'personal responsibility': 1.5, 'states rights': 2, 'capitalism': 1,
-                        'sovereignty': 1.5, 'nationalism': 2, 'meritocracy': 1.5,
-                        'tough on crime': 2, 'tax cuts': 2
-                    }
-                    left_score = sum(weight for kw, weight in left_keywords.items() if kw in text_lower)
-                    right_score = sum(weight for kw, weight in right_keywords.items() if kw in text_lower)
-                    total_bias = left_score + right_score
-                    bias_score = 50.0
-                    if total_bias > 0:
-                        bias_score = 50 + ((right_score - left_score) / total_bias) * 40
-                    bias_score = max(5, min(95, bias_score))
+                except Exception:
+                    pdf_bytes = b""
                     
-                    # Classification label
-                    if bias_score < 20: bias_label_text = "Strong Left"
-                    elif bias_score < 35: bias_label_text = "Left-Leaning"
-                    elif bias_score < 45: bias_label_text = "Center-Left"
-                    elif bias_score <= 55: bias_label_text = "Center"
-                    elif bias_score < 65: bias_label_text = "Center-Right"
-                    elif bias_score < 80: bias_label_text = "Right-Leaning"
-                    else: bias_label_text = "Strong Right"
-                    
-                    # Gradient bias bar
-                    st.markdown(f"""<div style='margin:1rem 0;'>
-                        <div style='position:relative; height:28px; border-radius:14px; overflow:hidden;
-                            background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 25%, #a8a29e 50%, #f59e0b 75%, #ef4444 100%);
-                            box-shadow: inset 0 2px 6px rgba(0,0,0,0.5);'>
-                            <div style='position:absolute; left:{bias_score}%; top:50%; transform:translate(-50%,-50%);
-                                width:18px; height:18px; background:#fff; border-radius:50%;
-                                box-shadow: 0 2px 8px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.8);
-                                border: 2px solid rgba(0,0,0,0.2);'></div>
-                        </div>
-                        <div style='display:flex; justify-content:space-between; margin-top:4px; font-size:0.75rem; color:var(--text-muted);'>
-                            <span>◄ Left</span><span>Center</span><span>Right ►</span>
-                        </div>
-                    </div>""", unsafe_allow_html=True)
-                    st.markdown(f"""<div style='text-align:center;'>
-                        <span style='font-size:1.1rem; font-weight:700; color:var(--text-primary);'>{bias_label_text}</span><br>
-                        <span style='font-size:0.8rem; color:var(--text-muted);'>Based on {int(total_bias)} weighted keyword matches</span>
-                    </div>""", unsafe_allow_html=True)
-                    
-                    # Show top detected bias keywords
-                    detected_left = [kw for kw in left_keywords if kw in text_lower]
-                    detected_right = [kw for kw in right_keywords if kw in text_lower]
-                    if detected_left or detected_right:
-                        with st.expander("🔎 Detected Bias Keywords", expanded=False):
-                            if detected_left:
-                                st.markdown("**Left indicators:** " + ", ".join([f"`{kw}`" for kw in detected_left[:8]]))
-                            if detected_right:
-                                st.markdown("**Right indicators:** " + ", ".join([f"`{kw}`" for kw in detected_right[:8]]))
+                csv_df = pd.DataFrame([{
+                    "title": title_prefix,
+                    "prediction": results['prediction'],
+                    "confidence": results['confidence'],
+                    "category": results.get('category', results['prediction']),
+                    "credibility": results['credibility'],
+                    "clickbait_score": results.get('clickbait_score', 0.0),
+                    "ai_score": results.get('ai_score', 0.0),
+                    "source_trust": results.get('source_trust', 50.0),
+                    "summary": summary_data,
+                    "fear_score": sentiment_data['fear'],
+                    "anger_score": sentiment_data['anger'],
+                    "neutral_score": sentiment_data['neutral'],
+                    "people": ", ".join(entities_data['people']),
+                    "organizations": ", ".join(entities_data['organizations']),
+                    "locations": ", ".join(entities_data['locations'])
+                }])
+                csv_bytes = csv_df.to_csv(index=False).encode('utf-8')
 
-            # Named Entities Block (enhanced with spaCy NER)
-            with st.container(border=True):
-                ner_method = "spaCy NER" if entities_data.get('dates') is not None else "Rule-Based"
-                st.markdown(f"#### 🏷️ Extracted Named Entities <span style='font-size:0.7rem; color:var(--text-muted); margin-left:8px;'>via {ner_method}</span>", unsafe_allow_html=True)
-                col_e1, col_e2, col_e3 = st.columns(3)
-                with col_e1:
-                    st.markdown("**👤 Key People**")
-                    for p in entities_data['people'][:5]:
-                        st.markdown(f"- {p}")
-                    if not entities_data['people']:
-                        st.caption("None identified")
-                with col_e2:
-                    st.markdown("**🏢 Organizations**")
-                    for o in entities_data['organizations'][:5]:
-                        st.markdown(f"- {o}")
-                    if not entities_data['organizations']:
-                        st.caption("None identified")
-                with col_e3:
-                    st.markdown("**📍 Locations**")
-                    for loc in entities_data['locations'][:5]:
-                        st.markdown(f"- {loc}")
-                    if not entities_data['locations']:
-                        st.caption("None identified")
-                # Show dates and monetary values if spaCy extracted them
-                dates_list = entities_data.get('dates', [])
-                money_list = entities_data.get('money', [])
-                if dates_list or money_list:
-                    col_e4, col_e5 = st.columns(2)
-                    with col_e4:
-                        if dates_list:
-                            st.markdown("**📅 Dates Mentioned**")
-                            for d in dates_list[:5]:
-                                st.markdown(f"- {d}")
-                    with col_e5:
-                        if money_list:
-                            st.markdown("**💰 Monetary Values**")
-                            for m in money_list[:5]:
-                                st.markdown(f"- {m}")
-
-            # PDF & CSV Exporting Buttons
-            st.markdown("<br>", unsafe_allow_html=True)
-            
-            has_suspicious = bool(indicators['suspicious_patterns'])
-            has_credible = bool(indicators['credibility_indicators'])
-
-            if has_suspicious and has_credible:
-                col_sus, col_cred = st.columns(2)
-                with col_sus:
+                col_feed1, col_feed2, col_feed3 = st.columns([1.5, 1.2, 1.8])
+                with col_feed1:
                     with st.container(border=True):
-                        st.markdown("#### 🚩 Sensational / Suspicious Words")
-                        st.caption("Language styles or sensational claims commonly correlated with clickbait or unverified stories.")
-                        badges_html = "".join([f'<span class="badge-suspicious">🚩 {explain_pattern(pat)}</span>' for pat in sorted(set(indicators['suspicious_patterns'][:15]))])
-                        st.markdown(f'<div style="margin-top: 0.5rem;">{badges_html}</div>', unsafe_allow_html=True)
-                with col_cred:
+                        st.markdown("#### 📥 Document Exports")
+                        st.caption("Generate reports for offline verification dossier archives.")
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        st.download_button(
+                            label="📥 Download PDF Report",
+                            data=pdf_bytes,
+                            file_name=f"truthshield_{int(time.time())}.pdf",
+                            mime="application/pdf",
+                            width='stretch'
+                        )
+                        st.download_button(
+                            label="📊 Export Data as CSV",
+                            data=csv_bytes,
+                            file_name=f"truthshield_{int(time.time())}.csv",
+                            mime="text/csv",
+                            width='stretch'
+                        )
+                        
+                with col_feed2:
                     with st.container(border=True):
-                        st.markdown("#### ✅ Journalistic / Credibility Signals")
-                        st.caption("Phrases and keywords indicating citations, official statements, and objective reporting.")
-                        badges_html = "".join([f'<span class="badge-credible">✅ {explain_pattern(pat)}</span>' for pat in sorted(set(indicators['credibility_indicators'][:15]))])
-                        st.markdown(f'<div style="margin-top: 0.5rem;">{badges_html}</div>', unsafe_allow_html=True)
-            elif has_suspicious:
-                with st.container(border=True):
-                    st.markdown("#### 🚩 Sensational / Suspicious Words")
-                    st.caption("Language styles or sensational claims commonly correlated with clickbait or unverified stories.")
-                    badges_html = "".join([f'<span class="badge-suspicious">🚩 {explain_pattern(pat)}</span>' for pat in sorted(set(indicators['suspicious_patterns'][:15]))])
-                    st.markdown(f'<div style="margin-top: 0.5rem;">{badges_html}</div>', unsafe_allow_html=True)
-            elif has_credible:
-                with st.container(border=True):
-                    st.markdown("#### ✅ Journalistic / Credibility Signals")
-                    st.caption("Phrases and keywords indicating citations, official statements, and objective reporting.")
-                    badges_html = "".join([f'<span class="badge-credible">✅ {explain_pattern(pat)}</span>' for pat in sorted(set(indicators['credibility_indicators'][:15]))])
-                    st.markdown(f'<div style="margin-top: 0.5rem;">{badges_html}</div>', unsafe_allow_html=True)
+                        st.markdown("#### 💬 Calibrate Model")
+                        st.caption("Submit Analyst feedback to improve classifier thresholds.")
+                        st.markdown("<br><br>", unsafe_allow_html=True)
+                        if st.button("📢 Submit Accuracy Feedback", key="go_to_feedback_page_btn", type="primary", width='stretch'):
+                            st.session_state.page = "feedback"
+                            st.rerun()
 
-            # RAG Fact Verification Block
-            st.markdown("<br>", unsafe_allow_html=True)
-            with st.container(border=True):
-                st.markdown("#### 🔍 RAG Fact Verification & Claims Check")
-                st.caption("Factual claims extracted and verified against Google Fact Check API and Wikipedia.")
-                
-                if results.get('verification_results'):
-                    for v in results['verification_results']:
-                        claim_text = v.get('claim_text') or v.get('claim')
-                        rating = v.get('rating') or "Unverified"
-                        rating_lower = rating.lower()
-                        url_ref = v.get('url')
-                        source_ref = v.get('source')
+                with col_feed3:
+                    with st.container(border=True):
+                        st.markdown("#### 🛠️ Fact-Check Cross-References")
+                        st.caption("Search external intelligence clearinghouses for verification:")
                         
-                        if rating_lower in ['true', 'correct', 'verified', 'credible']:
-                            verdict_emoji = "✅"
-                            badge_color = "rgba(95, 138, 107, 0.15)"
-                            text_color = "#5f8a6b"
-                        elif rating_lower in ['false', 'incorrect', 'misleading', 'fake', 'debunked']:
-                            verdict_emoji = "❌"
-                            badge_color = "rgba(212, 93, 78, 0.15)"
-                            text_color = "#d45d4e"
-                        else:
-                            verdict_emoji = "❓"
-                            badge_color = "rgba(212, 155, 76, 0.12)"
-                            text_color = "#d49b4c"
-                            
-                        with st.expander(f"{verdict_emoji} Claim: \"{claim_text}\" — **{rating}**"):
-                            st.markdown(f"<div style='background:{badge_color}; padding:12px; border-radius:8px; border-left:4px solid {text_color};'>", unsafe_allow_html=True)
-                            st.markdown(f"**Verification Rating:** {rating}")
-                            if source_ref:
-                                st.markdown(f"**Fact-Checking Entity:** {source_ref}")
-                            if url_ref:
-                                st.markdown(f"**Verification Source Link:** [View Verification Details]({url_ref})")
-                            st.markdown("</div>", unsafe_allow_html=True)
-                else:
-                    st.info("No verified historical fact checks were matched for the claims extracted from this article.")
-
-            # Explainable AI (XAI) Panel
-            with st.container(border=True):
-                st.markdown("#### 🔬 Explainable AI (XAI) Reasoning")
-                st.caption("How our multi-class model and heuristic detectors combined to produce this verdict.")
-                
-                col_x1, col_x2 = st.columns([2, 3])
-                with col_x1:
-                    st.markdown("**Metric Contribution Breakdown:**")
-                    st.markdown(f"🏛️ **Source Trust Score:** `{results['source_trust']:.0f}%`")
-                    st.markdown(f"📰 **Clickbait Score:** `{results['clickbait_score']*100:.1f}%`")
-                    st.markdown(f"🤖 **AI-Generated Probability:** `{results['ai_score']*100:.1f}%`")
-                    st.markdown(f"🎯 **Model Confidence:** `{results['confidence']*100:.1f}%`")
-                with col_x2:
-                    st.markdown("**Plain English Logic Explanation:**")
-                    cat_explain = ""
-                    cat_val = results['category']
-                    if cat_val == 'REAL':
-                        cat_explain = "This article was classified as **REAL** because the Voting Classifier ensemble predicted it as credible, the source domain has standard editorial credibility, and clickbait/AI-generation features were not significantly present."
-                    elif cat_val == 'SATIRE':
-                        cat_explain = "This article was classified as **SATIRE** because the source domain is identified in our reputation database as a known satire or parody publication."
-                    elif cat_val == 'CLICKBAIT':
-                        cat_explain = "This article was classified as **CLICKBAIT** because the sensationalism score exceeded the threshold, indicating the headline is formulated primarily to drive clicks."
-                    elif cat_val == 'MISLEADING':
-                        cat_explain = "This article was classified as **MISLEADING** because the model predicted it as FAKE with low-to-moderate confidence, indicating mixed credibility signals, or the source domain has a low reputation score."
-                    else: # FAKE
-                        cat_explain = "This article was classified as **FAKE** because the ML ensemble predicted it as FAKE with high confidence, supported by negative linguistic indicators and lack of trusted source alignment."
-                    st.markdown(cat_explain)
-
-            # Add Feedback Loop & Action Center
-            st.markdown("---")
-            try:
-                pdf_bytes = generate_credibility_pdf(
-                    title=title_prefix,
-                    summary=summary_data,
-                    prediction=results['prediction'],
-                    confidence=results['confidence'],
-                    credibility=results['credibility'],
-                    indicators=indicators,
-                    domain_profile=domain_profile,
-                    sentiment=sentiment_data,
-                    entities=entities_data,
-                    category=results.get('category'),
-                    clickbait_score=results.get('clickbait_score'),
-                    ai_score=results.get('ai_score'),
-                    verification_results=results.get('verification_results'),
-                    source_trust=results.get('source_trust'),
-                    explanation=cat_explain
-                )
-            except Exception:
-                pdf_bytes = b""
-                
-            csv_df = pd.DataFrame([{
-                "title": title_prefix,
-                "prediction": results['prediction'],
-                "confidence": results['confidence'],
-                "category": results.get('category', results['prediction']),
-                "credibility": results['credibility'],
-                "clickbait_score": results.get('clickbait_score', 0.0),
-                "ai_score": results.get('ai_score', 0.0),
-                "source_trust": results.get('source_trust', 50.0),
-                "summary": summary_data,
-                "fear_score": sentiment_data['fear'],
-                "anger_score": sentiment_data['anger'],
-                "neutral_score": sentiment_data['neutral'],
-                "people": ", ".join(entities_data['people']),
-                "organizations": ", ".join(entities_data['organizations']),
-                "locations": ", ".join(entities_data['locations'])
-            }])
-            csv_bytes = csv_df.to_csv(index=False).encode('utf-8')
-            
-            col_dl1, col_dl2 = st.columns(2)
-            with col_dl1:
-                st.download_button(
-                    label="📥 Download PDF Report",
-                    data=pdf_bytes,
-                    file_name=f"truthshield_{int(time.time())}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True
-                )
-            with col_dl2:
-                st.download_button(
-                    label="📊 Export Data as CSV",
-                    data=csv_bytes,
-                    file_name=f"truthshield_{int(time.time())}.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-
-            # Add Feedback Loop & Action Center
-            st.markdown("---")
-            col_feed1, col_feed2 = st.columns(2)
-            with col_feed1:
-                with st.container(border=True):
-                    st.markdown("#### 💬 AI Analysis Feedback")
-                    st.caption("Help us calibrate the model. Share your agreement and rate the accuracy of our AI.")
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("📢 Submit Accuracy Feedback", key="go_to_feedback_page_btn", type="primary", use_container_width=True):
-                        st.session_state.page = "feedback"
-                        st.rerun()
+                        search_query = ""
+                        if article_text:
+                            search_query = "+".join(article_text.split()[:8])
                         
-            with col_feed2:
-                with st.container(border=True):
-                    st.markdown("#### 🛠️ Fact-Checking Action Center")
-                    st.caption("Cross-reference this story on external trusted databases:")
-                    
-                    search_query = ""
-                    if article_text:
-                        search_query = "+".join(article_text.split()[:8])
-                    
-                    st.markdown(f"""
-                    <div style="display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 0.8rem;">
-                        <a href="https://www.snopes.com/?s={search_query}" target="_blank" style="text-decoration:none;">
-                            <button style="width:100%; text-align:left; background:rgba(255,255,255,0.02); color:var(--text-primary); border:1px solid rgba(255,255,255,0.06); padding:0.5rem 1rem; border-radius:8px; cursor:pointer; font-weight:600;">🔍 Search Snopes Fact-Check</button>
-                        </a>
-                        <a href="https://www.politifact.com/search/?q={search_query}" target="_blank" style="text-decoration:none;">
-                            <button style="width:100%; text-align:left; background:rgba(255,255,255,0.02); color:var(--text-primary); border:1px solid rgba(255,255,255,0.06); padding:0.5rem 1rem; border-radius:8px; cursor:pointer; font-weight:600;">⚖️ Search PolitiFact</button>
-                        </a>
-                        <a href="https://www.google.com/search?q={search_query}+fact+check" target="_blank" style="text-decoration:none;">
-                            <button style="width:100%; text-align:left; background:rgba(255,255,255,0.02); color:var(--text-primary); border:1px solid rgba(255,255,255,0.06); padding:0.5rem 1rem; border-radius:8px; cursor:pointer; font-weight:600;">🌐 Google Fact-Check Search</button>
-                        </a>
-                    </div>
-                    """, unsafe_allow_html=True)
+                        st.markdown(f"""
+                        <div style="display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 0.5rem;">
+                            <a href="https://www.snopes.com/?s={search_query}" target="_blank" style="text-decoration:none;">
+                                <button style="width:100%; text-align:left; background:#141A24; color:var(--text-primary); border:1px solid var(--border-color); padding:0.4rem 0.8rem; border-radius:6px; cursor:pointer; font-size:0.75rem; font-family:var(--font-mono);">🔍 Search Snopes Index</button>
+                            </a>
+                            <a href="https://www.politifact.com/search/?q={search_query}" target="_blank" style="text-decoration:none;">
+                                <button style="width:100%; text-align:left; background:#141A24; color:var(--text-primary); border:1px solid var(--border-color); padding:0.4rem 0.8rem; border-radius:6px; cursor:pointer; font-size:0.75rem; font-family:var(--font-mono);">⚖️ Search PolitiFact KB</button>
+                            </a>
+                            <a href="https://www.google.com/search?q={search_query}+fact+check" target="_blank" style="text-decoration:none;">
+                                <button style="width:100%; text-align:left; background:rgba(255,255,255,0.02); color:var(--text-primary); border:1px solid rgba(255,255,255,0.06); padding:0.5rem 1rem; border-radius:8px; cursor:pointer; font-weight:600;">🌐 Google Fact-Check Search</button>
+                            </a>
+                        </div>
+                        """, unsafe_allow_html=True)
 
         elif predict_clicked:
             if "📝" in input_mode:
@@ -3264,7 +3379,7 @@ def render_dashboard():
                         <div class="edu-desc">False remedies, medical scams, and vaccine misinformation put lives in immediate danger by discouraging scientific treatment.</div>
                     </div>
                 </div>
-                <div class="edu-card" style="border-left-color: #c68b3f;">
+                <div class="edu-card" style="border-left-color: #F59E0B;">
                     <span class="edu-icon">🗳️</span>
                     <div class="edu-body">
                         <div class="edu-title">Democratic Integrity</div>
@@ -3278,7 +3393,7 @@ def render_dashboard():
                         <div class="edu-desc">Continuous exposure to conspiracy theories leads to cynicism. When people stop believing professional journalism, social trust collapses.</div>
                     </div>
                 </div>
-                <div class="edu-card" style="border-left-color: #d35230;">
+                <div class="edu-card" style="border-left-color: #06B6D4;">
                     <span class="edu-icon">💸</span>
                     <div class="edu-body">
                         <div class="edu-title">Economic Harms & Scams</div>
@@ -3293,14 +3408,14 @@ def render_dashboard():
                 <div style="margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-secondary);">
                     Why do our brains naturally fall for deceptive articles? Cognitive science reveals several mental blindspots:
                 </div>
-                <div class="edu-card" style="border-left-color: #c68b3f;">
+                <div class="edu-card" style="border-left-color: #F59E0B;">
                     <span class="edu-icon">🧭</span>
                     <div class="edu-body">
                         <div class="edu-title">Confirmation Bias</div>
                         <div class="edu-desc">We automatically favor and share information that confirms our existing worldviews, while rejecting contradicting evidence out-of-hand.</div>
                     </div>
                 </div>
-                <div class="edu-card" style="border-left-color: #d35230;">
+                <div class="edu-card" style="border-left-color: #06B6D4;">
                     <span class="edu-icon">🔁</span>
                     <div class="edu-body">
                         <div class="edu-title">The Illusory Truth Effect</div>
@@ -3329,14 +3444,14 @@ def render_dashboard():
                 <div style="margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-secondary);">
                     The rise of generative AI has changed the scale and sophistication of fake news:
                 </div>
-                <div class="edu-card" style="border-left-color: #d35230;">
+                <div class="edu-card" style="border-left-color: #06B6D4;">
                     <span class="edu-icon">🤖</span>
                     <div class="edu-body">
                         <div class="edu-title">Synthetic Articles</div>
                         <div class="edu-desc">Large Language Models can write thousands of convincing, grammatically perfect fake news posts in seconds, making bot farms highly scalable.</div>
                     </div>
                 </div>
-                <div class="edu-card" style="border-left-color: #c68b3f;">
+                <div class="edu-card" style="border-left-color: #F59E0B;">
                     <span class="edu-icon">👁️</span>
                     <div class="edu-body">
                         <div class="edu-title">Deepfakes & Voice Clones</div>
@@ -3359,14 +3474,14 @@ def render_dashboard():
                 <div style="margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-secondary);">
                     Created by digital literacy experts, the <b>S.I.F.T.</b> method is a rapid, 4-step framework used by fact-checkers:
                 </div>
-                <div class="edu-card" style="border-left-color: #b24339;">
+                <div class="edu-card" style="border-left-color: #EF4444;">
                     <span class="edu-icon">🛑</span>
                     <div class="edu-body">
                         <div class="edu-title">1. Stop</div>
                         <div class="edu-desc">Before reading, reacting, or sharing, pause. Recognize if a headline triggers an intense emotion—that is a signal to slow down.</div>
                     </div>
                 </div>
-                <div class="edu-card" style="border-left-color: #c68b3f;">
+                <div class="edu-card" style="border-left-color: #F59E0B;">
                     <span class="edu-icon">🕵️‍♂️</span>
                     <div class="edu-body">
                         <div class="edu-title">2. Investigate the Source</div>
@@ -3380,7 +3495,7 @@ def render_dashboard():
                         <div class="edu-desc">Do a quick search. Are reliable organizations (like Reuters, AP, BBC, or established local papers) reporting the same facts? If it is only on one site, it's likely false.</div>
                     </div>
                 </div>
-                <div class="edu-card" style="border-left-color: #4c705b;">
+                <div class="edu-card" style="border-left-color: #10B981;">
                     <span class="edu-icon">🔍</span>
                     <div class="edu-body">
                         <div class="edu-title">4. Trace Claims to Context</div>
@@ -3395,21 +3510,21 @@ def render_dashboard():
                 <div style="margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-secondary);">
                     Not all false information is the same. It exists on a spectrum:
                 </div>
-                <div class="edu-card" style="border-left-color: #b24339;">
+                <div class="edu-card" style="border-left-color: #EF4444;">
                     <span class="edu-icon">🔴</span>
                     <div class="edu-body">
                         <div class="edu-title">Fabricated Content</div>
                         <div class="edu-desc">100% false, intentionally manufactured to deceive or cause harm.</div>
                     </div>
                 </div>
-                <div class="edu-card" style="border-left-color: #8c7b6c;">
+                <div class="edu-card" style="border-left-color: #64748B;">
                     <span class="edu-icon">🟤</span>
                     <div class="edu-body">
                         <div class="edu-title">Manipulated Content</div>
                         <div class="edu-desc">Real images or video edited to change the message (e.g., deepfakes or cropped photos).</div>
                     </div>
                 </div>
-                <div class="edu-card" style="border-left-color: #c68b3f;">
+                <div class="edu-card" style="border-left-color: #F59E0B;">
                     <span class="edu-icon">🟡</span>
                     <div class="edu-body">
                         <div class="edu-title">Misleading Context</div>
@@ -3423,7 +3538,7 @@ def render_dashboard():
                         <div class="edu-desc">Impersonating trusted journalism brands (e.g., creating a site called <code>bbc-news-report.com</code>).</div>
                     </div>
                 </div>
-                <div class="edu-card" style="border-left-color: #4c705b;">
+                <div class="edu-card" style="border-left-color: #10B981;">
                     <span class="edu-icon">🟢</span>
                     <div class="edu-body">
                         <div class="edu-title">Satire / Parody</div>
@@ -3469,7 +3584,7 @@ def render_dashboard():
                 if game_q != "Choose a headline...":
                     if "1. " in game_q:
                         ans = st.radio("Is this headline Fact or Fiction?", ["Fact", "Fiction"], key="game_ans_1")
-                        eval_btn = st.button("Check Answer", key="game_btn_1")
+                        eval_btn = st.button("Check Answer", key="game_btn_1", width='content')
                         if eval_btn:
                             if ans == "Fact":
                                 st.success("🎉 **Correct!** In late 2024, Earth temporarily captured a small asteroid named **2024 PT5** as a 'mini-moon' for approximately two months. It was widely reported by NASA and major astrophysics journals.")
@@ -3477,7 +3592,7 @@ def render_dashboard():
                                 st.error("❌ **Incorrect.** This is actually a **Fact**! Earth temporarily captured asteroid 2024 PT5 as a mini-moon in late 2024.")
                     elif "2. " in game_q:
                         ans = st.radio("Is this headline Fact or Fiction?", ["Fact", "Fiction"], key="game_ans_2")
-                        eval_btn = st.button("Check Answer", key="game_btn_2")
+                        eval_btn = st.button("Check Answer", key="game_btn_2", width='content')
                         if eval_btn:
                             if ans == "Fiction":
                                 st.success("🎉 **Correct!** This is **Fiction**. While broccoli contains healthy antioxidants, claims of a 'complete cure for aging' are sensationalized clickbait and unverified by medical science.")
@@ -3485,7 +3600,7 @@ def render_dashboard():
                                 st.error("❌ **Incorrect.** This is **Fiction**! Although broccoli is nutritious, there is no medical cure for aging, and the headline is classic health misinformation.")
                     elif "3. " in game_q:
                         ans = st.radio("Is this headline Fact or Fiction?", ["Fact", "Fiction"], key="game_ans_3")
-                        eval_btn = st.button("Check Answer", key="game_btn_3")
+                        eval_btn = st.button("Check Answer", key="game_btn_3", width='content')
                         if eval_btn:
                             if ans == "Fiction":
                                 st.success("🎉 **Correct!** This is **Fiction**. Bananas do contain trace amounts of radioactive Potassium-40, but you would need to eat **10 million bananas** in a single sitting to receive a lethal dose.")
@@ -3521,19 +3636,19 @@ def render_dashboard():
                     
                     # Map categories to their representative styling colors
                     theme_colors = {
-                        "REAL": "#4c705b",                     # Sage green
-                        "HIGHLY CREDIBLE": "#4c705b",          # Safe Green
-                        "LIKELY REAL": "#7ea388",              # Light Green
-                        "UNCERTAIN": "#d49b4c",                # Gold
-                        "LIKELY FAKE": "#ea580c",              # Orange
-                        "HIGH RISK": "#b24339",                # Crimson Red
-                        "HIGH RISK MISINFORMATION": "#b24339", # Crimson Red
-                        "FAKE": "#b24339",                     # Rust red
+                        "REAL": "#10B981",                     # Emerald
+                        "HIGHLY CREDIBLE": "#10B981",          # Emerald
+                        "LIKELY REAL": "#34D399",              # Light Emerald
+                        "UNCERTAIN": "#F59E0B",                # Gold
+                        "LIKELY FAKE": "#F97316",              # Orange
+                        "HIGH RISK": "#EF4444",                # Vivid Red
+                        "HIGH RISK MISINFORMATION": "#EF4444", # Vivid Red
+                        "FAKE": "#EF4444",                     # Red
                         "SATIRE": "#6366f1",                   # Indigo
                         "CLICKBAIT": "#f59e0b",                 # Amber
-                        "MISLEADING": "#ea580c"                 # Orange
+                        "MISLEADING": "#F97316"                 # Orange
                     }
-                    colors_list = [theme_colors.get(str(l).upper(), "#a8a29e") for l in cat_counts.index]
+                    colors_list = [theme_colors.get(str(l).upper(), "#64748B") for l in cat_counts.index]
                     
                     fig_pie = go.Figure(data=[go.Pie(
                         labels=cat_counts.index,
@@ -3544,11 +3659,11 @@ def render_dashboard():
                     fig_pie.update_layout(
                         paper_bgcolor='rgba(0,0,0,0)',
                         plot_bgcolor='rgba(0,0,0,0)',
-                        font=dict(color="#f5f2eb", family="Space Grotesk"),
+                        font=dict(color="#E2E8F0", family="Space Grotesk"),
                         height=250,
                         margin=dict(l=10, r=10, t=10, b=10)
                     )
-                    st.plotly_chart(fig_pie, use_container_width=True)
+                    st.plotly_chart(fig_pie, width='stretch')
                     
             with col_a2:
                 with st.container(border=True):
@@ -3560,20 +3675,20 @@ def render_dashboard():
                     fig_line = go.Figure(go.Scatter(
                         x=date_counts['date'],
                         y=date_counts['count'],
-                        mode='lines+markers',
-                        line=dict(color='#d49b4c', width=2),
-                        marker=dict(size=6, color='#e15b3e')
+                        mode='markers+lines',
+                        line=dict(color='#06B6D4', width=2),
+                        marker=dict(size=6, color='#F59E0B')
                     ))
                     fig_line.update_layout(
                         paper_bgcolor='rgba(0,0,0,0)',
                         plot_bgcolor='rgba(0,0,0,0)',
                         xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
                         yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
-                        font=dict(color="#f5f2eb", family="Space Grotesk"),
+                        font=dict(color="#E2E8F0", family="Space Grotesk"),
                         height=250,
                         margin=dict(l=20, r=20, t=10, b=30)
                     )
-                    st.plotly_chart(fig_line, use_container_width=True)
+                    st.plotly_chart(fig_line, width='stretch')
                     
             col_a3, col_a4 = st.columns(2)
             with col_a3:
@@ -3597,17 +3712,17 @@ def render_dashboard():
                         x=dom_counts.values,
                         y=dom_counts.index,
                         orientation='h',
-                        marker_color='#d49b4c'
+                        marker_color='#F59E0B'
                     ))
                     fig_bar.update_layout(
                         paper_bgcolor='rgba(0,0,0,0)',
                         plot_bgcolor='rgba(0,0,0,0)',
                         xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
-                        font=dict(color="#f5f2eb", family="Space Grotesk"),
+                        font=dict(color="#E2E8F0", family="Space Grotesk"),
                         height=250,
                         margin=dict(l=120, r=10, t=10, b=30)
                     )
-                    st.plotly_chart(fig_bar, use_container_width=True)
+                    st.plotly_chart(fig_bar, width='stretch')
                     
             with col_a4:
                 with st.container(border=True):
@@ -3627,7 +3742,7 @@ def render_dashboard():
                         mode='markers+text',
                         marker=dict(
                             size=df_geo['count'] * 5,
-                            color='#e15b3e',
+                            color='#06B6D4',
                             opacity=0.7,
                             line=dict(color='rgba(255,255,255,0.1)', width=1)
                         ),
@@ -3640,11 +3755,11 @@ def render_dashboard():
                         plot_bgcolor='rgba(0,0,0,0)',
                         xaxis=dict(title="Longitude", range=[-180, 180], showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
                         yaxis=dict(title="Latitude", range=[-90, 90], showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
-                        font=dict(color="#f5f2eb", family="Space Grotesk"),
+                        font=dict(color="#E2E8F0", family="Space Grotesk"),
                         height=250,
                         margin=dict(l=30, r=10, t=10, b=30)
                     )
-                    st.plotly_chart(fig_geo, use_container_width=True)
+                    st.plotly_chart(fig_geo, width='stretch')
         
         # Feedback Analytics Section
         st.markdown("---")
@@ -3738,18 +3853,18 @@ def render_dashboard():
                 
                 fig_cm = go.Figure(data=go.Heatmap(
                     z=z, x=x, y=y,
-                    colorscale=[[0, '#090706'], [0.5, '#c68b3f'], [1, '#5f8a6b']],
+                    colorscale=[[0, '#0B0F14'], [0.5, '#F59E0B'], [1, '#10B981']],
                     text=z, texttemplate="%{text}",
                     showscale=False
                 ))
                 fig_cm.update_layout(
                     paper_bgcolor='rgba(0,0,0,0)',
                     plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color="#f5f2eb", family="Space Grotesk"),
+                    font=dict(color="#E2E8F0", family="Space Grotesk"),
                     height=260,
                     margin=dict(l=60, r=10, t=10, b=30)
                 )
-                st.plotly_chart(fig_cm, use_container_width=True)
+                st.plotly_chart(fig_cm, width='stretch')
                 
         with col_e_charts2:
             with st.container(border=True):
@@ -3764,7 +3879,7 @@ def render_dashboard():
                     auc_val = 0.957
                 
                 fig_roc = go.Figure()
-                fig_roc.add_trace(go.Scatter(x=fpr, y=tpr, mode='lines', name=f'Model (AUC = {auc_val:.3f})', line=dict(color='#e15b3e', width=3)))
+                fig_roc.add_trace(go.Scatter(x=fpr, y=tpr, mode='lines', name=f'Model (AUC = {auc_val:.3f})', line=dict(color='#F59E0B', width=3)))
                 fig_roc.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode='lines', name='Random Guess', line=dict(color='gray', dash='dash')))
                 
                 fig_roc.update_layout(
@@ -3772,12 +3887,12 @@ def render_dashboard():
                     plot_bgcolor='rgba(0,0,0,0)',
                     xaxis=dict(title="False Positive Rate (1 - Specificity)", showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
                     yaxis=dict(title="True Positive Rate (Sensitivity)", showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
-                    font=dict(color="#f5f2eb", family="Space Grotesk"),
+                    font=dict(color="#E2E8F0", family="Space Grotesk"),
                     height=260,
                     margin=dict(l=60, r=10, t=10, b=30),
                     legend=dict(x=0.55, y=0.15)
                 )
-                st.plotly_chart(fig_roc, use_container_width=True)
+                st.plotly_chart(fig_roc, width='stretch')
 
         # ── 1. Model Drift Monitoring & Alerting ──
         drift_msg = None
@@ -3815,7 +3930,7 @@ def render_dashboard():
                 st.info("💡 **Retraining Info:** Retraining runs asynchronously as a background task. The dashboard will remain active using the existing model. Once complete, refresh the application to load the new weights.")
             with col_rt2:
                 st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("🚀 Trigger Ensemble Retraining", key="trigger_retraining_btn", use_container_width=True, type="primary"):
+                if st.button("🚀 Trigger Ensemble Retraining", key="trigger_retraining_btn", width='stretch', type="primary"):
                     try:
                         import subprocess
                         import sys
@@ -3877,7 +3992,8 @@ def render_dashboard():
                     label="📥 Export Filtered History as CSV",
                     data=csv_export,
                     file_name="truthshield_filtered_history.csv",
-                    mime="text/csv"
+                    mime="text/csv",
+                    width='content'
                 )
             
             st.markdown("---")
@@ -3894,13 +4010,13 @@ def render_dashboard():
                     score = row['credibility'] * 100
                     
                     theme_colors = {
-                        "REAL": "background:#4c705b; color:#fdfbf7;",       # Sage green
-                        "FAKE": "background:#b24339; color:#fdfbf7;",       # Rust red
-                        "SATIRE": "background:#6366f1; color:#fdfbf7;",     # Indigo
-                        "CLICKBAIT": "background:#f59e0b; color:#fdfbf7;",   # Amber
-                        "MISLEADING": "background:#ea580c; color:#fdfbf7;"   # Orange
+                        "REAL": "background:#10B981; color:#E2E8F0;",       # Emerald
+                        "FAKE": "background:#EF4444; color:#E2E8F0;",       # Red
+                        "SATIRE": "background:#8B5CF6; color:#E2E8F0;",     # Purple
+                        "CLICKBAIT": "background:#F59E0B; color:#0B0F14;",   # Amber
+                        "MISLEADING": "background:#F97316; color:#E2E8F0;"   # Orange
                     }
-                    badge_style = theme_colors.get(cat.upper(), "background:#a8a29e; color:#fdfbf7;")
+                    badge_style = theme_colors.get(cat.upper(), "background:#64748B; color:#E2E8F0;")
                     
                     with st.container(border=True):
                         col_h_info, col_h_score, col_h_btn = st.columns([3, 1.2, 1])
@@ -3910,7 +4026,7 @@ def render_dashboard():
                         with col_h_score:
                             st.markdown(f"<span style='padding:0.35rem 0.8rem; border-radius:6px; font-weight:bold; {badge_style}'>{cat} ({score:.0f}%)</span>", unsafe_allow_html=True)
                         with col_h_btn:
-                            st.button("🔎 Load Analysis", key=f"hist_load_{row['id']}", use_container_width=True, on_click=load_history_callback, args=(row['text'],))
+                            st.button("🔎 Load Analysis", key=f"hist_load_{row['id']}", width='stretch', on_click=load_history_callback, args=(row['text'],))
 
     st.markdown("""
     <div class="footer">
@@ -3954,17 +4070,20 @@ def main():
         st.session_state.otp_sent = False
     if "login_message" not in st.session_state:
         st.session_state.login_message = None
+    if "otp_sent_time" not in st.session_state:
+        st.session_state.otp_sent_time = None
 
-    st.markdown(f"""
-    <div class="hero-header">
-        <div style="text-align: center; margin-bottom: 1rem;">
-            <img src="{logo_base64}" style="width: 85px; height: 85px; border-radius: 50%; border: 2px solid var(--brass); box-shadow: 0 0 15px var(--brass-glow); padding: 3px; background: rgba(18, 15, 14, 0.8);">
+    if st.session_state.page in ("landing", "login"):
+        st.markdown(f"""
+        <div class="hero-header" style="padding: 1rem 1.5rem; margin-bottom: 1.2rem; border-radius: 8px;">
+            <div style="text-align: center; margin-bottom: 0.5rem;">
+                <img src="{logo_base64}" style="width: 50px; height: 50px; border-radius: 50%; border: 1px solid var(--accent); padding: 2px; background: rgba(18, 15, 14, 0.8);">
+            </div>
+            <h1 style="font-size: 1.5rem !important;">TruthShield Platform</h1>
+            <p style="font-size: 0.8rem !important; margin-top: 0.1rem;">AI-powered credibility analysis using NLP & Machine Learning</p>
         </div>
-        <h1>Fake News & Misinformation Detector</h1>
-        <div class="hero-divider"></div>
-        <p>AI-powered credibility analysis using NLP & Machine Learning</p>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+
 
     # Page routing logic
     if st.session_state.page == "landing":

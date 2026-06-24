@@ -8,11 +8,16 @@ AI content detector, claim verifier, multilingual translator, and source trust e
 
 import os
 import sys
+import io
+if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 import sqlite3
 import joblib
 import json
+import re
 from typing import Dict, List, Optional
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,6 +34,7 @@ from utils.ai_detector import AIContentDetector
 from utils.claim_verifier import ClaimVerifier
 from utils.multilingual import MultilingualProcessor
 from utils.source_engine import SourceEngine
+from utils.stance_detector import StanceDetector
 
 app = FastAPI(
     title="TruthShield Production API",
@@ -53,6 +59,7 @@ ai_detector = None
 claim_verifier = None
 multilingual_processor = None
 source_engine = None
+stance_detector = None
 
 model_path = os.path.join(PROJECT_ROOT, "model", "fake_news_model.pkl")
 db_path = os.path.join(PROJECT_ROOT, "data", "truthshield.db")
@@ -295,7 +302,7 @@ def init_db():
 def load_services():
     """Instantiate and load ML models and helper utilities."""
     global model, preprocessor, clickbait_detector, ai_detector
-    global claim_verifier, multilingual_processor, source_engine, last_loaded_mtime
+    global claim_verifier, multilingual_processor, source_engine, stance_detector, last_loaded_mtime
     
     # Initialize utility modules
     preprocessor = TextPreprocessor()
@@ -304,6 +311,7 @@ def load_services():
     claim_verifier = ClaimVerifier()
     multilingual_processor = MultilingualProcessor()
     source_engine = SourceEngine()
+    stance_detector = StanceDetector()
     
     # Initialize DB tables
     try:
@@ -360,14 +368,16 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         probs = model.predict_proba([processed])[0]
         classes = list(model.classes_)
         raw_confidence = float(probs[classes.index(prediction)])
+        # ml_score = P(REAL) directly from the model — this is the true signal
+        real_idx = classes.index('REAL') if 'REAL' in classes else 1
+        ml_score = float(probs[real_idx])
     except Exception:
         prediction = 'REAL'
         raw_confidence = 0.55
         probs = [0.5, 0.5]
         classes = ['FAKE', 'REAL']
+        ml_score = 0.5
         
-    ml_score = 0.5 + (raw_confidence * 0.5) if prediction == 'REAL' else 0.5 - (raw_confidence * 0.5)
-    
     bert_triggered = False
     bert_result = None
     if 0.45 <= raw_confidence <= 0.75:
@@ -381,21 +391,24 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
                     bert_result = bert_res
                     b_pred = bert_res['prediction']
                     b_conf = bert_res['confidence']
-                    bert_score = 0.5 + (b_conf * 0.5) if b_pred == 'REAL' else 0.5 - (b_conf * 0.5)
-                    ml_score = (ml_score + bert_score) / 2.0
+                    bert_ml_score = (0.5 + b_conf * 0.5) if b_pred == 'REAL' else (0.5 - b_conf * 0.5)
+                    ml_score = (ml_score + bert_ml_score) / 2.0
                     if ml_score >= 0.5:
                         prediction = 'REAL'
-                        raw_confidence = (ml_score - 0.5) * 2.0
+                        raw_confidence = ml_score
                     else:
                         prediction = 'FAKE'
-                        raw_confidence = (0.5 - ml_score) * 2.0
+                        raw_confidence = 1.0 - ml_score
         except Exception:
             pass
             
+    # ── Short-text penalty: push ml_score toward 0.5 (uncertain) for short inputs ──
     word_count = len(text.split())
     if word_count < 150:
-        length_factor = max(0.3, word_count / 150.0)
+        length_factor = max(0.5, word_count / 150.0)
         raw_confidence *= length_factor
+        # Shrink ml_score toward 0.5 for short text — model is unreliable on snippets
+        ml_score = 0.5 + (ml_score - 0.5) * length_factor
         
     indicators = preprocessor.analyze_suspicious_indicators(text)
     sensationalism = indicators.get('sensationalism_score', 0.0)
@@ -418,36 +431,48 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
     if source_engine is None:
         from utils.source_engine import SourceEngine
         source_engine = SourceEngine()
-    domain_to_check = url if url else text
-    
+    # ── Source Trust: only use actual URLs, never parse article text as domain ──
     source_trust = 50.0
     source_profile = None
-    try:
-        db_path = os.path.join(PROJECT_ROOT, "data", "truthshield.db")
-        if os.path.exists(db_path):
-            conn = sqlite3.connect(db_path)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            domain = source_engine.clean_domain(domain_to_check)
-            cursor.execute("SELECT * FROM source_reputation WHERE domain = ?", (domain,))
-            row = cursor.fetchone()
-            conn.close()
-            
-            if row:
-                source_trust = float(row["trust_score"])
-                source_profile = {
-                    "domain": row["domain"],
-                    "score": source_trust,
-                    "category": row["category"],
-                    "bias": row["bias"],
-                    "description": row["description"]
-                }
-    except Exception:
-        pass
+    has_valid_url = bool(url and url.strip() and ('.' in url) and len(url.strip()) < 500)
+    
+    if has_valid_url:
+        domain_to_check = url
+        try:
+            db_path_src = os.path.join(PROJECT_ROOT, "data", "truthshield.db")
+            if os.path.exists(db_path_src):
+                conn = sqlite3.connect(db_path_src)
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                domain = source_engine.clean_domain(domain_to_check)
+                cursor.execute("SELECT * FROM source_reputation WHERE domain = ?", (domain,))
+                row = cursor.fetchone()
+                conn.close()
+                
+                if row:
+                    source_trust = float(row["trust_score"])
+                    source_profile = {
+                        "domain": row["domain"],
+                        "score": source_trust,
+                        "category": row["category"],
+                        "bias": row["bias"],
+                        "description": row["description"]
+                    }
+        except Exception:
+            pass
         
-    if not source_profile:
-        source_profile = source_engine.get_trust_profile(domain_to_check)
-        source_trust = float(source_profile.get("score", 50.0))
+        if not source_profile:
+            source_profile = source_engine.get_trust_profile(domain_to_check)
+            source_trust = float(source_profile.get("score", 50.0))
+    else:
+        # No URL provided — use neutral defaults, do NOT parse article text as a domain
+        source_profile = {
+            "domain": "(no URL provided)",
+            "score": 50.0,
+            "category": "Unknown",
+            "bias": "Unknown",
+            "description": "No source URL was provided for domain reputation analysis."
+        }
         
     if claim_verifier is None:
         from utils.claim_verifier import ClaimVerifier
@@ -470,6 +495,25 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         agreement_ratio = 0.5
         temporal_analysis = {"is_consistent": True, "risk_score": 0.0, "mismatches": []}
         
+    # ── Stance Detection ──
+    try:
+        stance_claims = verification_res.get("claims", [])
+    except NameError:
+        stance_claims = []
+    stance_result = stance_detector.detect(text, claims=stance_claims,
+                                           verification_results=verification_results)
+    article_stance = stance_result["stance"]
+    stance_confidence = stance_result["stance_confidence"]
+    is_factcheck_article = stance_result["is_factcheck_article"]
+    
+    # Only treat the article as REFUTES if it is verified as a factcheck article.
+    # This prevents regular fake news articles that quote sources or mention WHO/scientists
+    # from hijacking the refutation logic and bypassing red-flag penalties.
+    if article_stance == "REFUTES" and not is_factcheck_article:
+        article_stance = "NEUTRAL"
+        stance_confidence = 0.5
+
+
     # ── Misinformation Pattern Matching ──
     matched_themes = []
     misinfo_multiplier = 1.0
@@ -496,19 +540,73 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
                         "match": match.group(0),
                         "multiplier": multiplier
                     })
-                    misinfo_multiplier *= (1.0 - multiplier)
-    except Exception:
-        pass
+                    # If the article is REFUTING the misinformation, do NOT penalize it
+                    if article_stance != "REFUTES":
+                        misinfo_multiplier *= (1.0 - multiplier)
+    except Exception as e:
+        print(f"WARNING: Misinfo patterns DB fetch failed: {e}")
 
-    # ── 9. Weighted Ensemble Decision Engine ──
+    # ── 9. Weighted Ensemble Decision Engine (Stance-Aware) ──
+    # Dynamic weight redistribution: when we have no real signal for source_trust
+    # or factcheck, those weights go to the ML model (the only real signal).
+    has_source_signal = has_valid_url and source_profile is not None and source_profile.get("category") not in ["Unknown", "Unverified Source"]
+    has_factcheck_signal = evidence_count > 0
+    
+    w_ml = 0.35
+    w_source = 0.20
+    w_factcheck = 0.25
+    w_clickbait = 0.05
+    w_nlp = 0.10
+    w_ai = 0.05
+    
+    # Redistribute phantom weights to ML when we have no real data
+    if not has_source_signal:
+        w_ml += w_source * 0.6       # 60% of source weight -> ML
+        w_nlp += w_source * 0.4      # 40% of source weight -> NLP
+        w_source = 0.0
+    if not has_factcheck_signal:
+        w_ml += w_factcheck * 0.7    # 70% of factcheck weight -> ML
+        w_nlp += w_factcheck * 0.3   # 30% of factcheck weight -> NLP
+        w_factcheck = 0.0
+    
     credibility = (
-        ml_score * 0.35 +
-        (source_trust / 100.0) * 0.20 +
-        factcheck_score * 0.25 +
-        (1.0 - clickbait_score) * 0.05 +
-        nlp_score * 0.10 +
-        (1.0 - ai_score) * 0.05
+        ml_score * w_ml +
+        (source_trust / 100.0) * w_source +
+        factcheck_score * w_factcheck +
+        (1.0 - clickbait_score) * w_clickbait +
+        nlp_score * w_nlp +
+        (1.0 - ai_score) * w_ai
     )
+    
+    # ── Stance-aware adjustment ──
+    if article_stance == "REFUTES" and stance_confidence >= 0.2:
+        # The article is debunking/fact-checking a false claim.
+        # The ML model may have said FAKE because it sees misinformation keywords
+        # (e.g., "hoax", "conspiracy", "vaccines cause autism") but those words
+        # appear in the context of refutation, not endorsement.
+        
+        # 1. Dampen ML penalty: if ML said FAKE, reduce its negative pull
+        if prediction == 'FAKE':
+            # Flip the ML contribution: a fact-check article containing "fake" keywords is credible
+            ml_boost = (1.0 - ml_score) * stance_confidence * 0.35
+            credibility += ml_boost
+        
+        # 2. Boost from refutation evidence
+        refutation_boost = stance_confidence * 0.15
+        credibility += refutation_boost
+        
+        # 3. Boost from fact-checker references
+        if stance_result.get("factchecker_references"):
+            credibility += min(len(stance_result["factchecker_references"]) * 0.05, 0.15)
+        
+        # 4. Boost from credibility indicators (experts, studies, etc.)
+        cred_indicator_boost = cred_signal * 0.1
+        credibility += cred_indicator_boost
+        
+    elif article_stance == "SUPPORTS" and stance_confidence >= 0.3:
+        # Article is promoting/endorsing a suspicious claim — apply extra penalty
+        credibility -= stance_confidence * 0.1
+    
     # Apply misinformation patterns multiplier
     credibility = credibility * misinfo_multiplier
     credibility = float(max(0.0, min(1.0, credibility)))
@@ -516,7 +614,7 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
     # ── 10. Evidence Sufficiency Check ──
     is_sufficient = True
     source_is_known = source_profile.get("category") not in ["Unverified Source", "Unknown"]
-    if source_trust <= 55.0 and evidence_count == 0:
+    if source_trust <= 55.0 and evidence_count == 0 and article_stance != "REFUTES":
         is_sufficient = False
     elif evidence_count > 0 and evidence_quality < 0.3:
         is_sufficient = False
@@ -526,12 +624,15 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
     ev_rel = min(evidence_count / 4.0, 1.0) if evidence_count > 0 else 0.2
     agree_rel = (abs(agreement_ratio - 0.5) * 2.0) if evidence_count > 0 else 0.5
     ml_rel = raw_confidence
+    # Stance detection adds to reliability when confident
+    stance_rel = stance_confidence if article_stance in ("REFUTES", "SUPPORTS") else 0.3
     
     reliability = (
-        source_rel_weight * 0.3 +
-        ev_rel * 0.3 +
-        agree_rel * 0.2 +
-        ml_rel * 0.2
+        source_rel_weight * 0.25 +
+        ev_rel * 0.25 +
+        agree_rel * 0.15 +
+        ml_rel * 0.15 +
+        stance_rel * 0.20
     )
     reliability = float(max(0.0, min(1.0, reliability)))
     
@@ -546,17 +647,30 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         category = "Likely Fake"
     else:
         category = "High Risk Misinformation"
+    
+    # Override: fact-check articles with strong refutation should not be "Uncertain" or worse
+    if is_factcheck_article and credibility >= 0.40 and category in ("Uncertain", "Likely Fake", "High Risk Misinformation"):
+        category = "Likely Real"
+        credibility = max(credibility, 0.65)
         
-    # Apply evidence sufficiency fallback
-    if not is_sufficient:
+    # Apply evidence sufficiency fallback (but not for identified fact-check articles or low-credibility/red-flagged articles)
+    if not is_sufficient and not is_factcheck_article and credibility >= 0.40:
         category = "Uncertain"
         reliability = min(reliability, 0.40)
+
         
-    # Final adjusted confidence (calibrated and clipped)
-    confidence = min(reliability, 0.99)
+    # Final adjusted confidence — blend reliability with stance and evidence strength
+    evidence_confidence = min(evidence_count / 3.0, 1.0) if evidence_count > 0 else 0.3
+    confidence = (
+        reliability * 0.5 +
+        evidence_confidence * 0.25 +
+        stance_confidence * 0.25
+    )
+    confidence = float(min(max(confidence, 0.05), 0.99))
     
-    # Set final binary prediction
-    final_prediction = "REAL" if credibility >= 0.5 else "FAKE"
+    # Set final binary prediction (calibrated threshold if no external metadata is present)
+    threshold = 0.55 if (not has_source_signal and not has_factcheck_signal) else 0.50
+    final_prediction = "REAL" if credibility >= threshold else "FAKE"
     
     # Sub-classification flags
     is_clickbait = clickbait_score > 0.6
@@ -567,17 +681,36 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
     positive_factors = []
     negative_factors = []
     
+    # ── Stance-based factors (highest priority) ──
+    if article_stance == "REFUTES" and stance_confidence >= 0.2:
+        refutation_sigs = ", ".join(stance_result["refutation_signals"][:3]) if stance_result["refutation_signals"] else "refutation language detected"
+        positive_factors.append({"factor": "Fact-Check / Debunking Article", "detail": f"Article refutes claims with evidence ({refutation_sigs}).", "impact": f"+{int(stance_confidence * 30)}%"})
+        if stance_result.get("factchecker_references"):
+            refs = ", ".join(stance_result["factchecker_references"][:3])
+            positive_factors.append({"factor": "Fact-Checker References", "detail": f"Cites fact-checking sources: {refs}.", "impact": "+15%"})
+    elif article_stance == "SUPPORTS" and stance_confidence >= 0.3:
+        support_sigs = ", ".join(stance_result["support_signals"][:3]) if stance_result["support_signals"] else "promotional language"
+        negative_factors.append({"factor": "Promotes Unverified Claims", "detail": f"Article endorses claims without evidence ({support_sigs}).", "impact": f"-{int(stance_confidence * 20)}%"})
+    
     if source_trust >= 75.0:
         positive_factors.append({"factor": "Trusted Publisher", "detail": f"Source {source_profile['domain']} has high trust ({source_trust}%).", "impact": "+20%"})
     elif source_trust <= 40.0:
         negative_factors.append({"factor": "Untrusted Source", "detail": f"Source {source_profile['domain']} is flagged as low-trust ({source_trust}%).", "impact": "-20%"})
         
     for theme_match in matched_themes:
-        negative_factors.append({
-            "factor": f"Misinformation: {theme_match['theme']}",
-            "detail": f"Content matches known pattern for {theme_match['theme'].lower()} (\"{theme_match['match']}\").",
-            "impact": f"-{int(theme_match['multiplier'] * 100)}%"
-        })
+        # If article refutes the misinformation, show it as informational, not a penalty
+        if article_stance == "REFUTES":
+            positive_factors.append({
+                "factor": f"Addresses: {theme_match['theme']}",
+                "detail": f"Article discusses and debunks {theme_match['theme'].lower()} topic (\"{theme_match['match']}\").",
+                "impact": "+5%"
+            })
+        else:
+            negative_factors.append({
+                "factor": f"Misinformation: {theme_match['theme']}",
+                "detail": f"Content matches known pattern for {theme_match['theme'].lower()} (\"{theme_match['match']}\").",
+                "impact": f"-{int(theme_match['multiplier'] * 100)}%"
+            })
 
     if evidence_count > 0:
         if agreement_ratio >= 0.75:
@@ -598,8 +731,10 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         
     if raw_confidence > 0.75 and prediction == 'REAL':
         positive_factors.append({"factor": "Model Signal", "detail": f"Classifier strongly validates text patterns.", "impact": "+35%"})
-    elif raw_confidence > 0.75 and prediction == 'FAKE':
+    elif raw_confidence > 0.75 and prediction == 'FAKE' and article_stance != "REFUTES":
         negative_factors.append({"factor": "Stylistic Flags", "detail": f"Classifier detects typical misinformation patterns.", "impact": "-35%"})
+    elif raw_confidence > 0.75 and prediction == 'FAKE' and article_stance == "REFUTES":
+        positive_factors.append({"factor": "Misinformation Keywords (Debunking Context)", "detail": "Classifier detected misinformation-related keywords, but article uses them in a refutation/fact-check context.", "impact": "+10%"})
         
     # ── 13. Audit Log & Drift Monitoring ──
     try:
@@ -685,7 +820,8 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         'is_satire': is_satire,
         'positive_factors': positive_factors,
         'negative_factors': negative_factors,
-        'temporal_analysis': temporal_analysis
+        'temporal_analysis': temporal_analysis,
+        'stance': stance_result
     }
 
 # ------------------------------------------------------------------
