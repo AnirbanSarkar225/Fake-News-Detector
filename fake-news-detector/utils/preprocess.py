@@ -61,10 +61,9 @@ class TextPreprocessor:
 
         # Red-flag patterns: strong indicators of fabricated or misleading content
         self.redflag_patterns = [
-            # Unverified / suppressed claims
             re.compile(r'\b(?:not been peer[- ]?reviewed|has not been (?:verified|confirmed|published))\b', re.IGNORECASE),
-            re.compile(r'\b(?:tried to suppress|being suppressed|being hidden|cover[- ]?up)\b', re.IGNORECASE),
-            re.compile(r'\b(?:big pharma|pharmaceutical companies.*suppress|government.*(?:hiding|covering))\b', re.IGNORECASE),
+            re.compile(r'\b(?:tried to suppress|being suppressed|been suppressed|being hidden|cover[- ]?up)\b', re.IGNORECASE),
+            re.compile(r'\b(?:big pharma|pharmaceutical companies.*suppress|suppress.*pharmaceutical companies|government.*(?:hiding|covering))\b', re.IGNORECASE),
             # Extraordinary unverifiable claims
             re.compile(r'\b(?:changes everything|left.*in (?:disbelief|shock)|revolutionize)\b', re.IGNORECASE),
             re.compile(r'\b(?:cure[sd]? (?:all|every|any)|eliminat(?:e|es|ed) the need for (?:all|every))\b', re.IGNORECASE),

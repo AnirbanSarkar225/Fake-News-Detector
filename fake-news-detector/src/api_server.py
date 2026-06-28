@@ -75,6 +75,7 @@ class PredictRequest(BaseModel):
 
 class PredictResponse(BaseModel):
     prediction: str
+    article_hash: str
     confidence: float
     credibility: float
     reliability: float
@@ -93,6 +94,7 @@ class VerificationResultItem(BaseModel):
 
 class AnalyzeResponse(BaseModel):
     prediction: str
+    article_hash: str
     confidence: float
     credibility: float
     reliability: float
@@ -233,6 +235,19 @@ def init_db():
         )
     """)
     
+    # Phase 8: Continuous Learning — misclassifications tracking table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS misclassifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            article_hash TEXT,
+            article_text TEXT,
+            model_prediction TEXT,
+            correct_label TEXT,
+            reported_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            included_in_retrain BOOLEAN DEFAULT 0
+        )
+    """)
+    
     # Run migration checks: Ensure newer columns are added to existing history table
     try:
         cursor.execute("PRAGMA table_info(history)")
@@ -251,6 +266,30 @@ def init_db():
             if col not in columns:
                 cursor.execute(f"ALTER TABLE history ADD COLUMN {col} {col_type}")
                 print(f"🔧 Database migration: added '{col}' to history table.")
+    except Exception as e:
+        print(f"⚠️ Database migration error: {e}")
+
+    # Migration: prediction_audit needs final_prediction (REAL/FAKE binary verdict)
+    # separate from `verdict` (the 5-level category like "Uncertain"). Accuracy
+    # tracking compares against the binary verdict, not the category.
+    try:
+        cursor.execute("PRAGMA table_info(prediction_audit)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "final_prediction" not in columns:
+            cursor.execute("ALTER TABLE prediction_audit ADD COLUMN final_prediction TEXT")
+            print("🔧 Database migration: added 'final_prediction' to prediction_audit table.")
+    except Exception as e:
+        print(f"⚠️ Database migration error: {e}")
+
+    # Migration: feedback needs article_hash to reliably join back to the exact
+    # prediction_audit row it's confirming/correcting, instead of matching on
+    # raw text (fragile across whitespace/casing differences and duplicates).
+    try:
+        cursor.execute("PRAGMA table_info(feedback)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "article_hash" not in columns:
+            cursor.execute("ALTER TABLE feedback ADD COLUMN article_hash TEXT")
+            print("🔧 Database migration: added 'article_hash' to feedback table.")
     except Exception as e:
         print(f"⚠️ Database migration error: {e}")
         
@@ -350,9 +389,18 @@ def check_and_reload_model():
 # Core Prediction Logic
 # ------------------------------------------------------------------
 
-def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detector=None, claim_verifier=None, source_engine=None, url=None):
+def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detector=None, claim_verifier=None, source_engine=None, url=None, article_hash_override=None):
     """
     Advanced credibility analysis decision engine.
+
+    article_hash_override: if provided, used as the audit-log article_hash
+    instead of hashing `text` directly. Callers that translate text before
+    calling this function (see /predict, /analyze) should pass the hash of
+    the ORIGINAL, pre-translation text here, so the same article always
+    gets the same hash regardless of language — otherwise a non-English
+    article's audit-log hash would never match the hash /feedback computes
+    from the user's original submission, and feedback would silently fail
+    to join against its prediction in /monitoring/accuracy.
     """
     import hashlib
     import json
@@ -360,7 +408,7 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
     
     check_and_reload_model()
     
-    text_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
+    text_hash = article_hash_override if article_hash_override else hashlib.md5(text.encode('utf-8')).hexdigest()
     processed = preprocessor.preprocess_for_model(text)
     
     try:
@@ -378,29 +426,40 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         classes = ['FAKE', 'REAL']
         ml_score = 0.5
         
+    # ── Transformer Classification (always-on when available) ──
     bert_triggered = False
     bert_result = None
-    if 0.45 <= raw_confidence <= 0.75:
-        try:
-            from utils.bert_predictor import BertPredictor
-            bert_predictor = BertPredictor()
-            if bert_predictor.is_available:
-                bert_res = bert_predictor.predict(text)
-                if bert_res:
-                    bert_triggered = True
-                    bert_result = bert_res
-                    b_pred = bert_res['prediction']
-                    b_conf = bert_res['confidence']
-                    bert_ml_score = (0.5 + b_conf * 0.5) if b_pred == 'REAL' else (0.5 - b_conf * 0.5)
-                    ml_score = (ml_score + bert_ml_score) / 2.0
-                    if ml_score >= 0.5:
-                        prediction = 'REAL'
-                        raw_confidence = ml_score
-                    else:
-                        prediction = 'FAKE'
-                        raw_confidence = 1.0 - ml_score
-        except Exception:
-            pass
+    transformer_used = False
+    transformer_model = "N/A"
+    transformer_score = None
+    try:
+        from utils.transformer_predictor import TransformerPredictor
+        _transformer_predictor = TransformerPredictor()
+        if _transformer_predictor.is_available:
+            _lang = "en"
+            try:
+                from utils.multilingual import MultilingualProcessor
+                _mp = MultilingualProcessor()
+                _det = _mp.detect_language(text)
+                _lang = _det.get("language_code", "en")
+            except Exception:
+                pass
+            t_res = _transformer_predictor.predict(text, language_code=_lang)
+            if t_res:
+                transformer_used = True
+                bert_triggered = True
+                transformer_model = t_res.get("model_used", "transformer")
+                bert_result = t_res
+                transformer_score = t_res["probabilities"]["REAL"]
+                ml_score = (ml_score * 0.35 + transformer_score * 0.65)
+                if ml_score >= 0.5:
+                    prediction = 'REAL'
+                    raw_confidence = ml_score
+                else:
+                    prediction = 'FAKE'
+                    raw_confidence = 1.0 - ml_score
+    except Exception:
+        pass
             
     # ── Short-text penalty: push ml_score toward 0.5 (uncertain) for short inputs ──
     word_count = len(text.split())
@@ -487,6 +546,7 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         agreement_ratio = float(verification_res.get("agreement_ratio", 0.5))
         temporal_analysis = verification_res.get("temporal_analysis", {"is_consistent": True, "risk_score": 0.0, "mismatches": []})
     except Exception:
+        verification_res = {}
         verification_results = []
         verification_status = "Fact verification unavailable."
         factcheck_score = 0.5
@@ -576,36 +636,42 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
     except Exception:
         pass
 
-    # ── 9. Weighted Ensemble Decision Engine (Stance-Aware) ──
-    # Dynamic weight redistribution: when we have no real signal for source_trust
-    # or factcheck, those weights go to the ML model (the only real signal).
+    # ── 9. Weighted Ensemble Decision Engine (Transformer-Primary, Stance-Aware) ──
     has_source_signal = has_valid_url and source_profile is not None and source_profile.get("category") not in ["Unknown", "Unverified Source"]
     has_factcheck_signal = evidence_count > 0
     
-    w_ml = 0.31
-    w_source = 0.20
-    w_factcheck = 0.25
-    w_clickbait = 0.05
-    w_nlp = 0.06
-    w_ai = 0.05
-    w_satire = 0.08
+    if transformer_used:
+        w_ml = 0.40
+        w_source = 0.15
+        w_factcheck = 0.20
+        w_clickbait = 0.05
+        w_nlp = 0.05
+        w_ai = 0.05
+        w_satire = 0.05
+        w_sentiment = 0.05
+    else:
+        w_ml = 0.31
+        w_source = 0.20
+        w_factcheck = 0.25
+        w_clickbait = 0.05
+        w_nlp = 0.06
+        w_ai = 0.05
+        w_satire = 0.08
+        w_sentiment = 0.0
     
-    # Redistribute phantom weights to ML when we have no real data
-    # Change A — NLP weight boost when no other signals:
-    # Change the 40% NLP share to 50% and reduce ML share to 50%.
     if not has_source_signal:
-        w_ml += w_source * 0.5       # 50% of source weight -> ML
-        w_nlp += w_source * 0.5      # 50% of source weight -> NLP
+        w_ml += w_source * 0.5
+        w_nlp += w_source * 0.5
         w_source = 0.0
     if not has_factcheck_signal:
-        w_ml += w_factcheck * 0.7    # 70% of factcheck weight -> ML
-        w_nlp += w_factcheck * 0.3   # 30% of factcheck weight -> NLP
+        w_ml += w_factcheck * 0.7
+        w_nlp += w_factcheck * 0.3
         w_factcheck = 0.0
-        
-    # Also when has_factcheck_signal is False AND has_source_signal is False simultaneously,
-    # add an extra +0.05 to w_nlp
     if not has_source_signal and not has_factcheck_signal:
         w_nlp += 0.05
+        w_ml -= 0.05
+    
+    sentiment_bias = 1.0 - indicators.get("sensationalism_score", 0.0)
     
     credibility = (
         ml_score * w_ml +
@@ -614,7 +680,8 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         (1.0 - clickbait_score) * w_clickbait +
         nlp_score * w_nlp +
         (1.0 - ai_score) * w_ai +
-        (1.0 - satire_score) * w_satire
+        (1.0 - satire_score) * w_satire +
+        sentiment_bias * w_sentiment
     )
 
     
@@ -899,21 +966,22 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
             source_dist[str(source_trust_int)] = source_dist.get(str(source_trust_int), 0) + 1
             
             feat_contrib = {
-                "ml_model": 0.35,
-                "source_trust": 0.20,
-                "fact_check": 0.25,
-                "nlp_indicators": 0.10,
-                "clickbait": 0.05,
-                "ai_generated": 0.05
+                "ml_model": round(w_ml, 4),
+                "source_trust": round(w_source, 4),
+                "fact_check": round(w_factcheck, 4),
+                "nlp_indicators": round(w_nlp, 4),
+                "clickbait": round(w_clickbait, 4),
+                "ai_generated": round(w_ai, 4),
+                "satire": round(w_satire, 4),
             }
             cursor.execute("""
                 INSERT INTO prediction_audit (
-                    article_hash, verdict, confidence, credibility, reliability, 
+                    article_hash, verdict, final_prediction, confidence, credibility, reliability, 
                     source_score, factcheck_score, clickbait_score, ai_score, 
                     features_contribution, monthly_accuracy, source_distribution, prediction_distribution
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                text_hash, category, confidence, credibility, reliability,
+                text_hash, category, final_prediction, confidence, credibility, reliability,
                 source_trust, factcheck_score, clickbait_score, ai_score,
                 json.dumps(feat_contrib), monthly_accuracy, json.dumps(source_dist), json.dumps(verdict_counts)
             ))
@@ -922,12 +990,47 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
     except Exception:
         pass
         
+    # Map to 3-tier display verdict
+    if credibility >= 0.65:
+        display_verdict = "\U0001f7e2 Likely True"
+    elif credibility >= 0.45:
+        display_verdict = "\U0001f7e1 Needs Verification"
+    else:
+        display_verdict = "\U0001f534 Likely Misleading"
+    
+    # Generate evidence report
+    evidence_report = None
+    try:
+        from utils.evidence_engine import EvidenceEngine
+        _ee = EvidenceEngine()
+        _partial = {
+            'prediction': final_prediction, 'confidence': confidence,
+            'credibility': credibility, 'reliability': reliability,
+            'category': category, 'clickbait_score': clickbait_score,
+            'ai_score': ai_score, 'source_trust': source_trust,
+            'source_profile': source_profile, 'verification_results': verification_results,
+            'indicators': indicators, 'bert_triggered': bert_triggered,
+            'is_clickbait': is_clickbait, 'is_ai_generated': is_ai_generated,
+            'is_satire': is_satire, 'nlp_score': nlp_score,
+            'factcheck_score': factcheck_score, 'article_stance': article_stance,
+            'stance_confidence': stance_confidence, 'ml_score': ml_score,
+            'evidence_count': evidence_count, 'matched_themes': matched_themes,
+            'satire_score': satire_score, 'temporal_analysis': temporal_analysis,
+            'stance': stance_result, 'transformer_used': transformer_used,
+            'transformer_model': transformer_model,
+        }
+        evidence_report = _ee.generate_report(_partial)
+    except Exception:
+        evidence_report = None
+    
     return {
         'prediction': final_prediction,
+        'article_hash': text_hash,
         'confidence': confidence,
         'credibility': credibility,
         'reliability': reliability,
         'category': category,
+        'display_verdict': display_verdict,
         'clickbait_score': clickbait_score,
         'ai_score': ai_score,
         'source_trust': source_trust,
@@ -937,6 +1040,8 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         'indicators': indicators,
         'bert_triggered': bert_triggered,
         'bert_result': bert_result,
+        'transformer_used': transformer_used,
+        'transformer_model': transformer_model,
         'is_sufficient': is_sufficient,
         'is_clickbait': is_clickbait,
         'is_ai_generated': is_ai_generated,
@@ -952,12 +1057,90 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         'stance_confidence': stance_confidence,
         'evidence_count': evidence_count,
         'matched_themes': matched_themes,
-        'satire_score': satire_score
+        'satire_score': satire_score,
+        'evidence_report': evidence_report,
     }
+
+@app.on_event("startup")
+async def on_startup():
+    """
+    Ensure services are loaded whenever the app starts, regardless of how
+    it's launched (e.g. `uvicorn api_server:app`, gunicorn workers, etc.),
+    not just the `python api_server.py` path below.
+    """
+    if model is None and preprocessor is None:
+        print("🚀 Initializing TruthShield API services (startup event)...")
+        load_services()
 
 # ------------------------------------------------------------------
 # API Endpoints
 # ------------------------------------------------------------------
+
+# ── Image Analysis Endpoint (Phase 5) ──
+
+class ImageAnalyzeRequest(BaseModel):
+    image_base64: str = Field(..., description="Base64-encoded image")
+    run_ocr: bool = True
+    check_manipulation: bool = True
+    reverse_search: bool = False
+
+@app.post("/analyze-image")
+async def analyze_image(request: ImageAnalyzeRequest):
+    """Analyze an image for OCR text, manipulation, and provenance."""
+    try:
+        import base64
+        image_bytes = base64.b64decode(request.image_base64)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid base64 image data")
+
+    try:
+        from utils.image_verifier import ImageVerifier
+        verifier = ImageVerifier()
+        result = verifier.verify_image(
+            image_bytes,
+            run_ocr=request.run_ocr,
+            check_manipulation=request.check_manipulation,
+            reverse_search=request.reverse_search,
+        )
+
+        # If OCR extracted text, also run text prediction
+        text_prediction = None
+        ocr_text = ""
+        if result.get("ocr") and result["ocr"].get("text"):
+            ocr_text = result["ocr"]["text"]
+            if len(ocr_text) >= 20 and model and preprocessor:
+                text_prediction = predict_article(
+                    ocr_text, model, preprocessor,
+                    clickbait_detector, ai_detector,
+                    claim_verifier, source_engine,
+                )
+
+        return {
+            "status": "ok",
+            "image_analysis": result,
+            "ocr_text": ocr_text,
+            "text_prediction": text_prediction,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Image analysis failed: {str(e)}")
+
+# ── Full Pipeline Endpoint (Phase 4) ──
+
+class PipelineRequest(BaseModel):
+    text: str = Field(..., min_length=20, description="Article text to analyze")
+    url: Optional[str] = None
+
+@app.post("/pipeline")
+async def run_pipeline(request: PipelineRequest):
+    """Run the full verification pipeline with stage tracking."""
+    try:
+        from utils.pipeline import VerificationPipeline
+        pipeline = VerificationPipeline()
+        result = pipeline.run(request.text, url=request.url)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Pipeline error: {str(e)}")
+
 
 @app.get("/")
 async def root():
@@ -979,20 +1162,26 @@ async def health():
 @app.post("/predict", response_model=PredictResponse)
 async def predict(request: PredictRequest):
     """Simple prediction endpoint compatible with v1."""
+    import hashlib
     text = request.text
+    article_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
     
-    # 1. Translate multilingual content
-    res_lang = multilingual_processor.process_for_analysis(text)
+    # Translate multilingual content. multilingual_processor is set by
+    # load_services() via the startup event before any request can reach
+    # this line; Pylance can't trace that cross-function reassignment.
+    res_lang = multilingual_processor.process_for_analysis(text)  # type: ignore[union-attr]
     eng_text = res_lang["processed_text"]
     
     # 2. Get predictions using unified pipeline
     res = predict_article(
         eng_text, model, preprocessor, clickbait_detector, ai_detector,
-        claim_verifier, source_engine, request.url
+        claim_verifier, source_engine, request.url,
+        article_hash_override=article_hash
     )
     
     return PredictResponse(
         prediction=res['prediction'],
+        article_hash=res['article_hash'],
         confidence=res['confidence'],
         credibility=res['credibility'],
         reliability=res['reliability'],
@@ -1017,11 +1206,15 @@ async def analyze(request: AnalyzeRequest):
     Advanced multi-class deep analysis endpoint.
     Runs ML predictions, clickbait scoring, AI content checks, and fact verification.
     """
+    import hashlib
     text = request.text
     url = request.url or ""
+    article_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
     
-    # 1. Multilingual processing
-    res_lang = multilingual_processor.process_for_analysis(text)
+    # Multilingual processing. multilingual_processor is set by load_services()
+    # via the startup event before any request can reach this line; Pylance
+    # can't trace that cross-function reassignment.
+    res_lang = multilingual_processor.process_for_analysis(text)  # type: ignore[union-attr]
     eng_text = res_lang["processed_text"]
     detected_lang_name = res_lang["language_name"]
     was_translated = res_lang["was_translated"]
@@ -1029,11 +1222,13 @@ async def analyze(request: AnalyzeRequest):
     # 2. Run prediction pipeline
     res = predict_article(
         eng_text, model, preprocessor, clickbait_detector, ai_detector,
-        claim_verifier, source_engine, url
+        claim_verifier, source_engine, url,
+        article_hash_override=article_hash
     )
     
     return AnalyzeResponse(
         prediction=res['prediction'],
+        article_hash=res['article_hash'],
         confidence=res['confidence'],
         credibility=res['credibility'],
         reliability=res['reliability'],
@@ -1051,14 +1246,17 @@ async def analyze(request: AnalyzeRequest):
 async def save_feedback(request: FeedbackRequest):
     """Store explicit user correctness feedback in the DB."""
     try:
+        import hashlib
+        article_hash = hashlib.md5(request.text.encode('utf-8')).hexdigest()
+
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO feedback (user_email, text, model_prediction, user_verdict, rating, notes)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO feedback (user_email, text, model_prediction, user_verdict, rating, notes, article_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (
             request.user_email, request.text, request.model_prediction,
-            request.user_verdict, request.rating, request.notes
+            request.user_verdict, request.rating, request.notes, article_hash
         ))
         conn.commit()
         conn.close()
@@ -1092,6 +1290,132 @@ async def get_history(limit: int = 50):
                 "timestamp": r["timestamp"]
             })
         return history_list
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+@app.get("/monitoring/accuracy")
+async def get_monitoring_accuracy(days: int = 30):
+    """
+    Live accuracy tracking: joins every logged prediction (prediction_audit,
+    written automatically on every /predict and /analyze call) against any
+    user feedback received for that same article (feedback.article_hash),
+    over a rolling window.
+
+    Accuracy here means: of the predictions where a user later confirmed or
+    corrected the verdict, what fraction did the model get right? This is a
+    proxy for true accuracy (not every prediction gets feedback), not a
+    ground-truth label — it reflects what users tell us, same as the existing
+    monthly_accuracy figure, but broken out over time instead of one rolling
+    number.
+
+    Returns:
+      - total_predictions: total predictions logged in the window
+      - feedback_coverage: predictions in the window that received feedback
+      - overall_accuracy: agreement rate across all feedback in the window
+      - daily: per-day breakdown of predictions, feedback count, accuracy
+      - verdict_breakdown: accuracy split by the model's final_prediction (REAL vs FAKE)
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT COUNT(*) FROM prediction_audit WHERE timestamp >= datetime('now', ?)",
+            (f"-{days} days",)
+        )
+        total_predictions = cursor.fetchone()[0]
+
+        # Join on article_hash: for each feedback row, find the most recent
+        # prediction_audit row for that same article within the window.
+        cursor.execute("""
+            SELECT
+                pa.final_prediction,
+                f.model_prediction,
+                f.user_verdict,
+                date(pa.timestamp) as pred_date
+            FROM feedback f
+            JOIN prediction_audit pa ON pa.article_hash = f.article_hash
+            WHERE pa.timestamp >= datetime('now', ?)
+              AND f.article_hash IS NOT NULL
+        """, (f"-{days} days",))
+        joined_rows = cursor.fetchall()
+        conn.close()
+
+        def is_agreement(final_prediction, user_verdict):
+            """
+            user_verdict may be the literal sentinel 'Agree with AI', or it may
+            be the user's own corrected label (e.g. 'REAL'/'FAKE'). Handle both
+            conventions rather than assume one, since the column has no schema
+            constraint and we can't be certain which the frontend sends.
+            """
+            if user_verdict is None:
+                return None
+            uv = user_verdict.strip().lower()
+            if uv == "agree with ai":
+                return True
+            if uv in ("disagree with ai", "disagree"):
+                return False
+            if uv in ("real", "fake") and final_prediction:
+                return uv == final_prediction.strip().lower()
+            return None  # unrecognized value — exclude rather than guess
+
+        daily = {}
+        verdict_breakdown = {"REAL": {"agree": 0, "disagree": 0}, "FAKE": {"agree": 0, "disagree": 0}}
+        total_feedback = 0
+        total_agree = 0
+
+        for row in joined_rows:
+            final_pred = row["final_prediction"]
+            user_verdict = row["user_verdict"]
+            pred_date = row["pred_date"]
+
+            agreement = is_agreement(final_pred, user_verdict)
+            if agreement is None:
+                continue
+
+            total_feedback += 1
+            if agreement:
+                total_agree += 1
+
+            daily.setdefault(pred_date, {"feedback_count": 0, "agree_count": 0})
+            daily[pred_date]["feedback_count"] += 1
+            if agreement:
+                daily[pred_date]["agree_count"] += 1
+
+            if final_pred in verdict_breakdown:
+                key = "agree" if agreement else "disagree"
+                verdict_breakdown[final_pred][key] += 1
+
+        daily_list = []
+        for d in sorted(daily.keys()):
+            fc = daily[d]["feedback_count"]
+            ac = daily[d]["agree_count"]
+            daily_list.append({
+                "date": d,
+                "feedback_count": fc,
+                "accuracy": round(ac / fc, 4) if fc > 0 else None
+            })
+
+        overall_accuracy = round(total_agree / total_feedback, 4) if total_feedback > 0 else None
+
+        def verdict_accuracy(v):
+            a = verdict_breakdown[v]["agree"]
+            d = verdict_breakdown[v]["disagree"]
+            total = a + d
+            return round(a / total, 4) if total > 0 else None
+
+        return {
+            "window_days": days,
+            "total_predictions": total_predictions,
+            "feedback_coverage": total_feedback,
+            "feedback_coverage_pct": round(total_feedback / total_predictions, 4) if total_predictions > 0 else None,
+            "overall_accuracy": overall_accuracy,
+            "verdict_breakdown": {
+                "REAL": {**verdict_breakdown["REAL"], "accuracy": verdict_accuracy("REAL")},
+                "FAKE": {**verdict_breakdown["FAKE"], "accuracy": verdict_accuracy("FAKE")},
+            },
+            "daily": daily_list,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 

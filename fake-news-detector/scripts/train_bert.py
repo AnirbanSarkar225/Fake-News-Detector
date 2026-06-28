@@ -28,10 +28,12 @@ def train_bert(epochs=3, batch_size=16, max_length=256, learning_rate=2e-5, max_
     # Import here so the script can be imported without torch
     import torch
     from torch.utils.data import Dataset, DataLoader
-    from transformers import DistilBertTokenizer, DistilBertForSequenceClassification, AdamW, get_linear_schedule_with_warmup
+    from torch.optim import AdamW
+    from transformers import DistilBertTokenizer, DistilBertForSequenceClassification, get_linear_schedule_with_warmup
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
+    use_amp = device.type == 'cuda'
+    print(f"Using device: {device} (AMP: {use_amp})")
 
     # Load data
     data_path = os.path.join(PROJECT_ROOT, 'data', 'news.csv')
@@ -115,9 +117,15 @@ def train_bert(epochs=3, batch_size=16, max_length=256, learning_rate=2e-5, max_
     optimizer = AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)
     total_steps = len(train_loader) * epochs
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=total_steps//10, num_training_steps=total_steps)
+    scaler = torch.amp.GradScaler('cuda') if use_amp else None
 
     # Training loop
     best_f1 = 0
+    val_acc = 0.0
+    val_labels = []
+    val_preds = []
+    patience = 2
+    no_improve = 0
     for epoch in range(epochs):
         model.train()
         total_loss = 0
@@ -127,16 +135,26 @@ def train_bert(epochs=3, batch_size=16, max_length=256, learning_rate=2e-5, max_
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['label'].to(device)
-
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-            loss = outputs.loss
-            total_loss += loss.item()
-
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            optimizer.step()
-            scheduler.step()
             optimizer.zero_grad()
+
+            if use_amp:
+                with torch.amp.autocast('cuda'):
+                    outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+                    loss = outputs.loss
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+                loss = outputs.loss
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                optimizer.step()
+
+            scheduler.step()
+            total_loss += loss.item()
 
             if (batch_idx + 1) % 50 == 0:
                 print(f"  Batch {batch_idx+1}/{len(train_loader)}, Loss: {loss.item():.4f}")
@@ -165,27 +183,51 @@ def train_bert(epochs=3, batch_size=16, max_length=256, learning_rate=2e-5, max_
 
         if val_f1 > best_f1:
             best_f1 = val_f1
+            no_improve = 0
             # Save best model
             save_dir = os.path.join(PROJECT_ROOT, 'model', 'distilbert_fakenews')
             os.makedirs(save_dir, exist_ok=True)
             model.save_pretrained(save_dir)
             tokenizer.save_pretrained(save_dir)
             print(f"  ✓ Best model saved (F1: {best_f1:.4f})")
+        else:
+            no_improve += 1
+            print(f"  No improvement ({no_improve}/{patience})")
+            if no_improve >= patience:
+                print(f"  Early stopping at epoch {epoch+1}")
+                break
 
     # Save metrics
     metrics = {
         'accuracy': float(val_acc),
         'f1_score': float(best_f1),
         'confusion_matrix': confusion_matrix(val_labels, val_preds).tolist(),
-        'epochs': epochs,
+        'epochs_trained': epoch + 1,
         'max_length': max_length,
         'batch_size': batch_size,
         'train_size': len(train_df),
         'val_size': len(val_df)
     }
-    metrics_path = os.path.join(PROJECT_ROOT, 'model', 'distilbert_fakenews', 'metrics.json')
+    save_dir = os.path.join(PROJECT_ROOT, 'model', 'distilbert_fakenews')
+    os.makedirs(save_dir, exist_ok=True)
+    metrics_path = os.path.join(save_dir, 'metrics.json')
     with open(metrics_path, 'w') as f:
         json.dump(metrics, f, indent=2)
+
+    # Attempt ONNX export
+    try:
+        from optimum.onnxruntime import ORTModelForSequenceClassification
+        onnx_dir = os.path.join(PROJECT_ROOT, 'model', 'distilbert_fakenews_onnx')
+        os.makedirs(onnx_dir, exist_ok=True)
+        print("\nExporting model to ONNX format...")
+        ort_model = ORTModelForSequenceClassification.from_pretrained(save_dir, export=True)
+        ort_model.save_pretrained(onnx_dir)
+        tokenizer.save_pretrained(onnx_dir)
+        print(f"  ✓ ONNX model saved to {onnx_dir}")
+    except ImportError:
+        print("\n⚠ ONNX export skipped (install optimum[onnxruntime] to enable)")
+    except Exception as e:
+        print(f"\n⚠ ONNX export failed: {e}")
 
     print(f"\n✅ Training complete! Best F1: {best_f1:.4f}")
 

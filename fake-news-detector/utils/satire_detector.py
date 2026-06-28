@@ -70,6 +70,12 @@ class SatireDetector:
             if domain in self.satire_domains:
                 return {"satire_score": 1.0, "is_satire": True}
 
+        # 1.5 Text checks for known satire names
+        text_lower = text.lower()
+        for name in ["the onion", "babylon bee", "clickhole", "the beaverton", "daily mash", "reductress", "borowitz report"]:
+            if name in text_lower:
+                score += 0.50
+
         # 2. Linguistic Pattern Check
         matched_patterns = []
         for pattern in self.satirical_patterns:

@@ -502,6 +502,15 @@ def run_e2e_stress_test(
 # Entry point
 # ───────────────────────────────────────────────────────────────
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="TruthShield Unified Test Suite & Stress Tester")
+    parser.add_argument("--unit-only", action="store_true", help="Run only Section 1 (Unit & heuristic tests)")
+    parser.add_argument("--ml-only", action="store_true", help="Run only Section 2 (ML benchmark)")
+    parser.add_argument("--e2e-only", action="store_true", help="Run only Section 3 (E2E stress test)")
+    parser.add_argument("--ml-samples", type=int, default=10000, help="Number of samples for ML benchmark")
+    parser.add_argument("--e2e-samples", type=int, default=500, help="Number of samples for E2E stress test")
+    args = parser.parse_args()
+
     print(f"\n{CYAN}{BOLD}")
     print("+------------------------------------------------------+")
     print("|       TruthShield Unified Test Suite v2              |")
@@ -519,22 +528,27 @@ def main():
         print(f"{RED}{exc}{RESET}")
         sys.exit(1)
 
+    # Determine which sections to run
+    run_all = not (args.unit_only or args.ml_only or args.e2e_only)
+
     # ── Section 1 ──
-    run_unit_tests(
-        model, preprocessor, clickbait_detect, ai_detect, claim_verifier, source_engine
-    )
+    if run_all or args.unit_only:
+        run_unit_tests(
+            model, preprocessor, clickbait_detect, ai_detect, claim_verifier, source_engine
+        )
 
     # ── Section 2 ──
-    run_ml_benchmark(model, preprocessor, sample_size=10_000)
+    if run_all or args.ml_only:
+        run_ml_benchmark(model, preprocessor, sample_size=args.ml_samples)
 
     # ── Section 3 ──
-    # Increase sample_size here if you want more statistical power.
-    # 500 completes in ~2-5 minutes depending on your machine.
-    run_e2e_stress_test(
-        model, preprocessor, clickbait_detect, ai_detect, claim_verifier, source_engine,
-        sample_size=500,
-    )
+    if run_all or args.e2e_only:
+        run_e2e_stress_test(
+            model, preprocessor, clickbait_detect, ai_detect, claim_verifier, source_engine,
+            sample_size=args.e2e_samples,
+        )
 
 
 if __name__ == "__main__":
     main()
+

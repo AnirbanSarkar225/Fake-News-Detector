@@ -30,6 +30,9 @@ except ImportError:
 class MultilingualProcessor:
     """Detect language, detect script, translate, and preprocess multilingual text."""
 
+    # Languages that should use MuRIL instead of DistilBERT
+    INDIAN_LANGUAGE_CODES = {"hi", "bn", "mr", "ta", "te", "gu", "kn", "ml", "pa", "ur"}
+
     SUPPORTED_LANGUAGES: Dict[str, Dict[str, str]] = {
         "en": {"name": "English", "script": "Latin"},
         "hi": {"name": "Hindi", "script": "Devanagari"},
@@ -236,6 +239,21 @@ class MultilingualProcessor:
                 "নিয়ে", "আমার", "তোমার", "সব", "কারণ", "অনেক",
                 "বলে", "হলে", "আগে", "পারে", "হতে", "গিয়ে", "ছিল",
             ],
+            "mr": [
+                "आहे", "आणि", "हे", "या", "त्या", "एक", "ते", "का", "की",
+                "केले", "करणे", "असे", "होते", "पण", "नाही", "सर्व", "म्हणून",
+                "आता", "कोणी", "येथे", "तर", "मध्ये", "वर", "साठी", "पासून",
+                "सोबत", "बरोबर", "जसे", "अशा", "कसे", "होत", "करत", "आले",
+                "गेले", "दिले", "घेतले", "सांगितले", "म्हणाले", "असून", "झाले",
+            ],
+            "ta": [
+                "ஒரு", "என", "இந்த", "அந்த", "என்று", "இது", "அது", "உள்ள",
+                "மற்றும்", "ஆகும்", "செய்த", "கொண்ட", "இருந்து", "என்ற",
+                "போது", "வேண்டும்", "தான்", "இல்லை", "அவர்", "நான்", "நீ",
+                "அவன்", "அவள்", "நாம்", "ஆனால்", "அல்லது", "எனவே",
+                "பற்றி", "மேல்", "கீழ்", "உடன்", "முன்", "பின்", "வரை",
+                "ஆக", "ஆகிய", "உள்ளது", "இருக்கும்", "என்பது", "கூறினார்",
+            ],
         }
         return _STOPWORDS.get(language_code, [])
 
@@ -263,6 +281,18 @@ class MultilingualProcessor:
             "confidence": detection["confidence"],
             "script": detection["script"],
         }
+
+    def get_optimal_model(self, language_code: str) -> str:
+        """
+        Return the optimal transformer model name for the given language.
+
+        Returns:
+            ``'muril'`` for Indian languages, ``'distilbert'`` for English
+            and all other languages.
+        """
+        if language_code in self.INDIAN_LANGUAGE_CODES:
+            return "muril"
+        return "distilbert"
 
     # ------------------------------------------------------------------
     # Helpers

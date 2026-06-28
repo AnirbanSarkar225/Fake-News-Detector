@@ -297,7 +297,7 @@ class ClaimVerifier:
         risk_score = 0.0
 
         # Outdated event recycling check
-        is_breaking = any(kw in text.lower() for kw in ["breaking", "now", "today", "yesterday", "recently", "current"])
+        is_breaking = any(kw in text.lower() for kw in ["breaking", "now", "today", "yesterday", "recently", "current", "latest", "new", "record", "this week"])
         if is_breaking and max_year < current_year - 3:
             mismatches.append(f"Outdated content: Article references events from {max_year} as breaking/current.")
             risk_score += 0.4

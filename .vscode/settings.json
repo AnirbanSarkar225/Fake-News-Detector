@@ -1,0 +1,14 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/fake-news-detector/.venv/Scripts/python.exe",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/fake-news-detector/.venv/Lib/site-packages",
+    "${workspaceFolder}/fake-news-detector"
+  ],
+  "python.analysis.typeCheckingMode": "off",
+  "python.analysis.diagnosticSeverityOverrides": {
+    "reportMissingImports": "none",
+    "reportMissingModuleSource": "none",
+    "reportMissingTypeStubs": "none",
+    "reportGeneralTypeIssues": "none"
+  }
+}

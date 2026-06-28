@@ -1362,18 +1362,19 @@ def explain_pattern(pat):
 
 def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detector=None, claim_verifier=None, source_engine=None, url=None):
     """
-    Advanced credibility analysis decision engine.
+    Advanced credibility analysis decision engine (TruthShield v2).
     
     1. Preprocesses text
     2. Runs ML Ensemble (LinearSVC, LogisticRegression, PassiveAggressive, ExtraTrees)
     3. Runs clickbait, AI-generated, and source trust checks
     4. Extracts claims, checks Claims KB cache, and calls RAG verifier
-    5. Applies DistilBERT secondary validation for borderline cases [0.45, 0.75]
-    6. Combines signals using weighted scoring (ML 35%, Source 20%, Fact-check 25%, NLP 10%, Clickbait 5%, AI 5%)
+    5. Runs Transformer classification (DistilBERT/MuRIL via TransformerPredictor)
+    6. Combines signals using weighted scoring (Transformer 40% when available, else TF-IDF primary)
     7. Runs Evidence Sufficiency check, fallback to Uncertain
     8. Calculates Reliability Score
-    9. Maps to 5-level verdict
-    10. Logs audit record
+    9. Maps to 5-level verdict + 3-tier display verdict
+    10. Generates Evidence Report
+    11. Logs audit record
     """
     import hashlib
     import json
@@ -1402,32 +1403,42 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         classes = ['FAKE', 'REAL']
         ml_score = 0.5
         
-    # ── 3. DistilBERT Secondary Validation ──
+    # ── 3. Transformer Classification (always-on when available) ──
     bert_triggered = False
     bert_result = None
-    if 0.45 <= raw_confidence <= 0.75:
-        try:
-            from utils.bert_predictor import BertPredictor
-            bert_predictor = BertPredictor()
-            if bert_predictor.is_available:
-                bert_res = bert_predictor.predict(text)
-                if bert_res:
-                    bert_triggered = True
-                    bert_result = bert_res
-                    b_pred = bert_res['prediction']
-                    b_conf = bert_res['confidence']
-                    bert_ml_score = (0.5 + b_conf * 0.5) if b_pred == 'REAL' else (0.5 - b_conf * 0.5)
-                    # Blend base model with DistilBERT
-                    ml_score = (ml_score + bert_ml_score) / 2.0
-                    # Recalculate prediction and raw_confidence
-                    if ml_score >= 0.5:
-                        prediction = 'REAL'
-                        raw_confidence = ml_score
-                    else:
-                        prediction = 'FAKE'
-                        raw_confidence = 1.0 - ml_score
-        except Exception:
-            pass # Fall back to base ML if BERT load fails
+    transformer_used = False
+    transformer_model = "N/A"
+    transformer_score = None
+    try:
+        from utils.transformer_predictor import TransformerPredictor
+        _transformer_predictor = TransformerPredictor()
+        if _transformer_predictor.is_available:
+            # Detect language for model routing
+            _lang = "en"
+            try:
+                from utils.multilingual import MultilingualProcessor
+                _mp = MultilingualProcessor()
+                _det = _mp.detect_language(text)
+                _lang = _det.get("language_code", "en")
+            except Exception:
+                pass
+            t_res = _transformer_predictor.predict(text, language_code=_lang)
+            if t_res:
+                transformer_used = True
+                bert_triggered = True
+                transformer_model = t_res.get("model_used", "transformer")
+                bert_result = t_res
+                transformer_score = t_res["probabilities"]["REAL"]
+                # Blend transformer with TF-IDF for ml_score
+                ml_score = (ml_score * 0.35 + transformer_score * 0.65)
+                if ml_score >= 0.5:
+                    prediction = 'REAL'
+                    raw_confidence = ml_score
+                else:
+                    prediction = 'FAKE'
+                    raw_confidence = 1.0 - ml_score
+    except Exception:
+        pass  # Fall back to TF-IDF only
             
     # ── 4. Short-text penalty: push ml_score toward 0.5 (uncertain) for short inputs ──
     word_count = len(text.split())
@@ -1606,23 +1617,34 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
     except Exception:
         pass
 
-    # ── 9. Weighted Ensemble Decision Engine (Stance-Aware) ──
-    # Dynamic weight redistribution: when we have no real signal for source_trust
-    # or factcheck, those weights go to the ML model (the only real signal).
+    # ── 9. Weighted Ensemble Decision Engine (Transformer-Primary, Stance-Aware) ──
+    # Dynamic weight redistribution: when transformer is available it gets highest weight.
+    # When no source/factcheck signal, those weights redistribute to ML + NLP.
     has_source_signal = has_valid_url and source_profile is not None and source_profile.get("category") not in ["Unknown", "Unverified Source"]
     has_factcheck_signal = evidence_count > 0
     
-    w_ml = 0.31
-    w_source = 0.20
-    w_factcheck = 0.25
-    w_clickbait = 0.05
-    w_nlp = 0.06
-    w_ai = 0.05
-    w_satire = 0.08
+    if transformer_used:
+        # Transformer-primary weights
+        w_ml = 0.40      # Transformer-blended ML score
+        w_source = 0.15
+        w_factcheck = 0.20
+        w_clickbait = 0.05
+        w_nlp = 0.05
+        w_ai = 0.05
+        w_satire = 0.05
+        w_sentiment = 0.05  # NEW: sentiment/bias from VADER
+    else:
+        # TF-IDF-primary weights (backward compatible)
+        w_ml = 0.31
+        w_source = 0.20
+        w_factcheck = 0.25
+        w_clickbait = 0.05
+        w_nlp = 0.06
+        w_ai = 0.05
+        w_satire = 0.08
+        w_sentiment = 0.0
     
     # Redistribute phantom weights to ML when we have no real data
-    # Change A — NLP weight boost when no other signals:
-    # Change the 40% NLP share to 50% and reduce ML share to 50%.
     if not has_source_signal:
         w_ml += w_source * 0.5       # 50% of source weight -> ML
         w_nlp += w_source * 0.5      # 50% of source weight -> NLP
@@ -1631,12 +1653,16 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         w_ml += w_factcheck * 0.7    # 70% of factcheck weight -> ML
         w_nlp += w_factcheck * 0.3   # 30% of factcheck weight -> NLP
         w_factcheck = 0.0
-        
-    # Also when has_factcheck_signal is False AND has_source_signal is False simultaneously,
-    # add an extra +0.05 to w_nlp, taken from w_ml so the total weight stays at 1.0
     if not has_source_signal and not has_factcheck_signal:
         w_nlp += 0.05
-        w_ml -= 0.05
+        w_clickbait -= 0.025
+        w_ai -= 0.025
+        _ml_nlp_pool = w_ml + w_nlp
+        w_nlp = _ml_nlp_pool / 4.5   # pool / (ratio + 1), ratio = 3.5
+        w_ml = _ml_nlp_pool - w_nlp
+    
+    # Compute sentiment/bias score from NLP indicators
+    sentiment_bias = 1.0 - indicators.get("sensationalism_score", 0.0)
     
     credibility = (
         ml_score * w_ml +
@@ -1645,7 +1671,8 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         (1.0 - clickbait_score) * w_clickbait +
         nlp_score * w_nlp +
         (1.0 - ai_score) * w_ai +
-        (1.0 - satire_score) * w_satire
+        (1.0 - satire_score) * w_satire +
+        sentiment_bias * w_sentiment
     )
 
     
@@ -1970,12 +1997,47 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
                 sent_suspicion = preprocessor.score_sentence_suspicion(sent)
         sentence_scores.append((sent, sent_suspicion))
         
+    # ── Generate Evidence Report ──
+    evidence_report = None
+    try:
+        from utils.evidence_engine import EvidenceEngine
+        _ee = EvidenceEngine()
+        # Build partial result for report generation
+        _partial_result = {
+            'prediction': final_prediction, 'confidence': confidence,
+            'credibility': credibility, 'reliability': reliability,
+            'category': category, 'clickbait_score': clickbait_score,
+            'ai_score': ai_score, 'source_trust': source_trust,
+            'source_profile': source_profile, 'verification_results': verification_results,
+            'indicators': indicators, 'bert_triggered': bert_triggered,
+            'is_clickbait': is_clickbait, 'is_ai_generated': is_ai_generated,
+            'is_satire': is_satire, 'nlp_score': nlp_score,
+            'factcheck_score': factcheck_score, 'article_stance': article_stance,
+            'stance_confidence': stance_confidence, 'ml_score': ml_score,
+            'evidence_count': evidence_count, 'matched_themes': matched_themes,
+            'satire_score': satire_score, 'temporal_analysis': temporal_analysis,
+            'stance': stance_result, 'transformer_used': transformer_used,
+            'transformer_model': transformer_model,
+        }
+        evidence_report = _ee.generate_report(_partial_result)
+    except Exception:
+        evidence_report = None
+    
+    # Map to 3-tier display verdict
+    if credibility >= 0.65:
+        display_verdict = "\U0001f7e2 Likely True"
+    elif credibility >= 0.45:
+        display_verdict = "\U0001f7e1 Needs Verification"
+    else:
+        display_verdict = "\U0001f534 Likely Misleading"
+    
     return {
         'prediction': final_prediction,
         'confidence': confidence,
         'credibility': credibility,
         'reliability': reliability,
         'category': category,
+        'display_verdict': display_verdict,
         'clickbait_score': clickbait_score,
         'ai_score': ai_score,
         'source_trust': source_trust,
@@ -1986,6 +2048,8 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         'indicators': indicators,
         'bert_triggered': bert_triggered,
         'bert_result': bert_result,
+        'transformer_used': transformer_used,
+        'transformer_model': transformer_model,
         'is_sufficient': is_sufficient,
         'is_clickbait': is_clickbait,
         'is_ai_generated': is_ai_generated,
@@ -2001,7 +2065,8 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         'stance_confidence': stance_confidence,
         'evidence_count': evidence_count,
         'matched_themes': matched_themes,
-        'satire_score': satire_score
+        'satire_score': satire_score,
+        'evidence_report': evidence_report,
     }
 
 
