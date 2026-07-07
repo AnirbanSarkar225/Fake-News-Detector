@@ -815,8 +815,8 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         category = "Likely Real"
         credibility = max(credibility, 0.65)
         
-    # Apply evidence sufficiency fallback (but not for identified fact-check articles or low-credibility/red-flagged articles)
-    if not is_sufficient and not is_factcheck_article and credibility >= 0.40:
+    # Apply evidence sufficiency fallback only for borderline/neutral credibility (0.45 to 0.58)
+    if not is_sufficient and not is_factcheck_article and 0.45 <= credibility <= 0.58:
         category = "Uncertain"
         reliability = min(reliability, 0.40)
 

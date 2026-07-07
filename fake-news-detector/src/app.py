@@ -1806,8 +1806,8 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         category = "Likely Real"
         credibility = max(credibility, 0.65)
         
-    # Apply evidence sufficiency fallback (but not for identified fact-check articles or low-credibility/red-flagged articles)
-    if not is_sufficient and not is_factcheck_article and credibility >= 0.40:
+    # Apply evidence sufficiency fallback only for borderline/neutral credibility (0.45 to 0.58)
+    if not is_sufficient and not is_factcheck_article and 0.45 <= credibility <= 0.58:
         category = "Uncertain"
         reliability = min(reliability, 0.40)
 
@@ -2416,12 +2416,12 @@ def start_updater_daemon():
         pass
 
 def load_live_metrics():
-    """Load live metrics from evaluation_metrics.json with fallbacks."""
+    """Load live metrics from evaluation_metrics.json — no hardcoded fallbacks."""
     metrics_path = os.path.join(PROJECT_ROOT, "model", "evaluation_metrics.json")
     
-    accuracy = 90.14
-    total_articles = 69957
-    model_type = "Ensemble model"
+    accuracy = None
+    total_articles = None
+    model_type = "Not trained"
     
     try:
         if os.path.exists(metrics_path):
@@ -2439,17 +2439,15 @@ def load_live_metrics():
             # Fallback check for news.csv to count lines if it exists
             csv_path = os.path.join(PROJECT_ROOT, "data", "news.csv")
             if os.path.exists(csv_path):
-                # Count lines quickly
                 with open(csv_path, "r", encoding="utf-8", errors="ignore") as f:
-                    # Subtract 1 for header
                     total_articles = sum(1 for line in f) - 1
     except Exception:
         pass
         
     return {
-        "accuracy_str": f"{accuracy:.2f}%",
+        "accuracy_str": f"{accuracy:.2f}%" if accuracy is not None else "N/A",
         "accuracy": accuracy,
-        "total_articles_str": f"{total_articles:,}",
+        "total_articles_str": f"{total_articles:,}" if total_articles is not None else "N/A",
         "total_articles": total_articles,
         "model_type": model_type
     }
@@ -3951,7 +3949,7 @@ def render_dashboard():
         st.caption("Performance matrices, verification diagnostics, and mathematical error distributions.")
         st.markdown("---")
         
-        # ── Load real metrics from JSON if available (Component 5) ──
+        # ── Load real metrics from JSON ──
         metrics_path = os.path.join(PROJECT_ROOT, "model", "evaluation_metrics.json")
         eval_metrics = None
         try:
@@ -3961,26 +3959,58 @@ def render_dashboard():
         except Exception:
             eval_metrics = None
         
-        # Use real metrics or fallback to hardcoded defaults
-        m_accuracy = eval_metrics['accuracy'] * 100 if eval_metrics else 90.14
-        m_precision = eval_metrics['precision'] * 100 if eval_metrics else 89.47
-        m_recall = eval_metrics['recall'] * 100 if eval_metrics else 90.82
-        m_f1 = eval_metrics['f1_score'] * 100 if eval_metrics else 90.14
+        if not eval_metrics:
+            st.warning("⚠️ **No training metrics found.** Run `python scripts/train_model.py` to generate `model/evaluation_metrics.json`. All stats below will show N/A until a model is trained.")
         
-        metrics_source = "📊 Live metrics from training" if eval_metrics else "📋 Default reference values"
+        # ── Model Identity & Metadata ──
+        with st.container(border=True):
+            st.markdown("#### 🏷️ Model Identity")
+            meta_c1, meta_c2, meta_c3, meta_c4 = st.columns(4, gap="medium")
+            with meta_c1:
+                model_type_str = eval_metrics.get('model_type', 'N/A') if eval_metrics else 'N/A'
+                st.metric("Architecture", model_type_str[:35] + "…" if len(model_type_str) > 35 else model_type_str)
+            with meta_c2:
+                tfidf_feats = eval_metrics.get('tfidf_features', 'N/A') if eval_metrics else 'N/A'
+                st.metric("TF-IDF Features", f"{tfidf_feats:,}" if isinstance(tfidf_feats, int) else tfidf_feats)
+            with meta_c3:
+                ngram = eval_metrics.get('ngram_range', 'N/A') if eval_metrics else 'N/A'
+                ngram_str = f"({ngram[0]}, {ngram[1]})" if isinstance(ngram, list) and len(ngram) == 2 else str(ngram)
+                st.metric("N-gram Range", ngram_str)
+            with meta_c4:
+                # Show metrics file last-modified time as training timestamp
+                train_ts = "N/A"
+                try:
+                    if os.path.exists(metrics_path):
+                        import datetime
+                        mtime = os.path.getmtime(metrics_path)
+                        train_ts = datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
+                except Exception:
+                    pass
+                st.metric("Last Trained", train_ts)
+
+        # ── Core Performance Metrics ──
+        metrics_source = "📊 **Live metrics** from `model/evaluation_metrics.json`" if eval_metrics else "📋 No metrics file found"
         st.caption(metrics_source)
         
-        col_m1, col_m2, col_m3, col_m4 = st.columns(4, gap="medium")
-        with col_m1:
-            st.metric("Accuracy Score", f"{m_accuracy:.2f}%", help="Overall dataset classification accuracy.")
-        with col_m2:
-            st.metric("Precision Score", f"{m_precision:.2f}%", help="Factual prediction precision.")
-        with col_m3:
-            st.metric("Recall Score", f"{m_recall:.2f}%", help="Proportion of actual real articles detected.")
-        with col_m4:
-            st.metric("F1-Score", f"{m_f1:.2f}%", help="Balanced harmonic mean of precision and recall.")
+        m_accuracy = eval_metrics['accuracy'] * 100 if eval_metrics and 'accuracy' in eval_metrics else None
+        m_precision = eval_metrics['precision'] * 100 if eval_metrics and 'precision' in eval_metrics else None
+        m_recall = eval_metrics['recall'] * 100 if eval_metrics and 'recall' in eval_metrics else None
+        m_f1 = eval_metrics['f1_score'] * 100 if eval_metrics and 'f1_score' in eval_metrics else None
+        m_auc = eval_metrics.get('roc_auc', None) if eval_metrics else None
         
-        # Show dataset size if available
+        col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5, gap="medium")
+        with col_m1:
+            st.metric("Accuracy", f"{m_accuracy:.2f}%" if m_accuracy is not None else "N/A", help="Overall dataset classification accuracy.")
+        with col_m2:
+            st.metric("Precision", f"{m_precision:.2f}%" if m_precision is not None else "N/A", help="Factual prediction precision.")
+        with col_m3:
+            st.metric("Recall", f"{m_recall:.2f}%" if m_recall is not None else "N/A", help="Proportion of actual real articles detected.")
+        with col_m4:
+            st.metric("F1-Score", f"{m_f1:.2f}%" if m_f1 is not None else "N/A", help="Balanced harmonic mean of precision and recall.")
+        with col_m5:
+            st.metric("ROC-AUC", f"{m_auc:.4f}" if m_auc is not None else "N/A", help="Area under the ROC curve (higher = better discrimination).")
+        
+        # Show dataset size
         if eval_metrics:
             col_ds1, col_ds2, col_ds3 = st.columns(3, gap="medium")
             with col_ds1:
@@ -3989,17 +4019,133 @@ def render_dashboard():
                 st.metric("Training Set", f"{eval_metrics.get('train_size', 0):,}")
             with col_ds3:
                 st.metric("Test Set", f"{eval_metrics.get('test_size', 0):,}")
-            
+        
+        # ── Individual Classifier Accuracy Breakdown ──
+        if eval_metrics and eval_metrics.get('individual_accuracy'):
+            with st.container(border=True):
+                st.markdown("#### 🧩 Individual Classifier Breakdown")
+                indiv = eval_metrics['individual_accuracy']
+                clf_cols = st.columns(len(indiv), gap="medium")
+                sorted_clfs = sorted(indiv.items(), key=lambda x: -x[1])
+                for i, (clf_name, clf_acc) in enumerate(sorted_clfs):
+                    with clf_cols[i]:
+                        acc_pct = clf_acc * 100
+                        # Color-code: green >= 85%, yellow >= 70%, red < 70%
+                        color = "#10B981" if acc_pct >= 85 else "#F59E0B" if acc_pct >= 70 else "#EF4444"
+                        st.markdown(f"""<div style="text-align:center; padding: 0.5rem 0;">
+                            <div style="font-size: 1.5rem; font-weight: 700; color: {color};">{acc_pct:.2f}%</div>
+                            <div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 2px;">{clf_name}</div>
+                        </div>""", unsafe_allow_html=True)
+        
+        # ── Live Prediction Audit Stats from DB ──
+        try:
+            db_path = os.path.join(PROJECT_ROOT, "data", "truthshield.db")
+            if os.path.exists(db_path):
+                audit_conn = sqlite3.connect(db_path)
+                audit_cursor = audit_conn.cursor()
+                
+                # Total predictions logged
+                audit_cursor.execute("SELECT COUNT(*) FROM prediction_audit")
+                total_preds = audit_cursor.fetchone()[0]
+                
+                # Last 30 days stats
+                audit_cursor.execute("""
+                    SELECT COUNT(*), AVG(credibility), AVG(confidence)
+                    FROM prediction_audit
+                    WHERE timestamp >= datetime('now', '-30 days')
+                """)
+                row_30d = audit_cursor.fetchone()
+                preds_30d = row_30d[0] if row_30d else 0
+                avg_cred_30d = row_30d[1] if row_30d and row_30d[1] is not None else None
+                avg_conf_30d = row_30d[2] if row_30d and row_30d[2] is not None else None
+                
+                # Verdict distribution (last 30 days)
+                audit_cursor.execute("""
+                    SELECT verdict, COUNT(*) 
+                    FROM prediction_audit 
+                    WHERE timestamp >= datetime('now', '-30 days')
+                    GROUP BY verdict
+                """)
+                verdict_dist_30d = dict(audit_cursor.fetchall())
+                
+                # User feedback accuracy
+                audit_cursor.execute("SELECT COUNT(*) FROM feedback")
+                total_feedback = audit_cursor.fetchone()[0]
+                
+                audit_cursor.execute("SELECT COUNT(*) FROM feedback WHERE user_verdict = 'Agree with AI'")
+                agree_count = audit_cursor.fetchone()[0]
+                
+                user_accuracy = (agree_count / total_feedback * 100) if total_feedback > 0 else None
+                
+                audit_conn.close()
+                
+                if total_preds > 0:
+                    st.markdown("---")
+                    st.markdown("#### 📡 Live System Health (from prediction audit DB)")
+                    
+                    live_c1, live_c2, live_c3, live_c4, live_c5 = st.columns(5, gap="medium")
+                    with live_c1:
+                        st.metric("Total Predictions", f"{total_preds:,}", help="All predictions logged to the audit database.")
+                    with live_c2:
+                        st.metric("Last 30 Days", f"{preds_30d:,}", help="Predictions in the last 30-day window.")
+                    with live_c3:
+                        st.metric("Avg Credibility (30d)", f"{avg_cred_30d*100:.1f}%" if avg_cred_30d is not None else "N/A")
+                    with live_c4:
+                        st.metric("Avg Confidence (30d)", f"{avg_conf_30d*100:.1f}%" if avg_conf_30d is not None else "N/A")
+                    with live_c5:
+                        st.metric("User Agreement Rate", f"{user_accuracy:.1f}%" if user_accuracy is not None else "N/A (no feedback)", help=f"Based on {total_feedback} user feedback entries.")
+                    
+                    # Verdict distribution chart
+                    if verdict_dist_30d:
+                        with st.container(border=True):
+                            st.markdown("#### 📊 Live Verdict Distribution (Last 30 Days)")
+                            verdict_colors = {
+                                "Highly Credible": "#10B981",
+                                "Likely Real": "#34D399",
+                                "Uncertain": "#F59E0B",
+                                "Likely Fake": "#F97316",
+                                "High Risk Misinformation": "#EF4444",
+                                "Satire / Parody": "#6366f1"
+                            }
+                            v_labels = list(verdict_dist_30d.keys())
+                            v_values = list(verdict_dist_30d.values())
+                            v_colors = [verdict_colors.get(l, "#64748B") for l in v_labels]
+                            
+                            fig_vd = go.Figure(data=[go.Bar(
+                                x=v_labels, y=v_values,
+                                marker_color=v_colors,
+                                text=v_values, textposition='auto'
+                            )])
+                            fig_vd.update_layout(
+                                paper_bgcolor='rgba(0,0,0,0)',
+                                plot_bgcolor='rgba(0,0,0,0)',
+                                xaxis=dict(showgrid=False),
+                                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', title="Count"),
+                                font=dict(color="#E2E8F0", family="Space Grotesk"),
+                                height=250,
+                                margin=dict(l=40, r=10, t=10, b=60)
+                            )
+                            st.plotly_chart(fig_vd, width='stretch')
+        except Exception:
+            pass
+        
+        st.markdown("---")
+        
+        # ── Confusion Matrix & ROC Curve ──
         col_e_charts1, col_e_charts2 = st.columns(2)
         with col_e_charts1:
             with st.container(border=True):
                 st.markdown("#### Confusion Matrix Heatmap")
                 if eval_metrics and 'confusion_matrix' in eval_metrics:
                     z = eval_metrics['confusion_matrix']
+                    labels = eval_metrics.get('labels', ['FAKE', 'REAL'])
+                    x = [f'Predicted {l}' for l in labels]
+                    y = [f'True {l}' for l in labels]
                 else:
-                    z = [[31201, 3340], [3560, 31856]]
-                x = ['Predicted FAKE', 'Predicted REAL']
-                y = ['True FAKE', 'True REAL']
+                    st.caption("⚠️ No confusion matrix data — train the model first.")
+                    z = [[0, 0], [0, 0]]
+                    x = ['Predicted FAKE', 'Predicted REAL']
+                    y = ['True FAKE', 'True REAL']
                 
                 fig_cm = go.Figure(data=go.Heatmap(
                     z=z, x=x, y=y,
@@ -4022,14 +4168,15 @@ def render_dashboard():
                 if eval_metrics and eval_metrics.get('roc_fpr') and eval_metrics.get('roc_tpr'):
                     fpr = eval_metrics['roc_fpr']
                     tpr = eval_metrics['roc_tpr']
-                    auc_val = eval_metrics.get('roc_auc', 0.957)
+                    auc_val = eval_metrics.get('roc_auc', 0.0)
                 else:
-                    fpr = np.linspace(0, 1, 100).tolist()
-                    tpr = (1 - np.exp(-5 * np.linspace(0, 1, 100))).tolist()
-                    auc_val = 0.957
+                    st.caption("⚠️ No ROC data — train the model first.")
+                    fpr = [0, 1]
+                    tpr = [0, 1]
+                    auc_val = 0.0
                 
                 fig_roc = go.Figure()
-                fig_roc.add_trace(go.Scatter(x=fpr, y=tpr, mode='lines', name=f'Model (AUC = {auc_val:.3f})', line=dict(color='#F59E0B', width=3)))
+                fig_roc.add_trace(go.Scatter(x=fpr, y=tpr, mode='lines', name=f'Model (AUC = {auc_val:.4f})', line=dict(color='#F59E0B', width=3)))
                 fig_roc.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode='lines', name='Random Guess', line=dict(color='gray', dash='dash')))
                 
                 fig_roc.update_layout(
