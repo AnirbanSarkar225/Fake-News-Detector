@@ -684,6 +684,25 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         sentiment_bias * w_sentiment
     )
 
+    # ── ML Confidence Anchoring ──
+    # Problem: well-written fake news scores high on NLP quality (no red flags,
+    # clean grammar), inflating credibility above the threshold even when the
+    # trained ML model said FAKE. The ML model is the ONLY component trained on
+    # labeled data, so its confident predictions should anchor the final score.
+    #
+    # When ML is confident FAKE (ml_score < 0.42) and no external signals
+    # (source trust, fact-check) exist to contradict it, cap credibility so
+    # auxiliary signals cannot single-handedly flip the verdict.
+    if not has_source_signal and not has_factcheck_signal:
+        if ml_score < 0.42:
+            # ML is fairly confident this is FAKE — cap credibility
+            ml_anchor_cap = 0.35 + ml_score * 0.35  # range: 0.35 to 0.497
+            credibility = min(credibility, ml_anchor_cap)
+        elif ml_score < 0.48:
+            # ML is leaning FAKE but not very confident — soft cap
+            ml_anchor_cap = 0.42 + ml_score * 0.20  # range: 0.42 to 0.516
+            credibility = min(credibility, ml_anchor_cap)
+
     
     # ── Stance-aware adjustment ──
     if article_stance == "REFUTES" and stance_confidence >= 0.2:
@@ -764,9 +783,9 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
                 stale_years_found.append(year_val)
                 stale_count += 1
                 
-    temporal_penalty = min(stale_count * 0.10, 0.30)
+    temporal_penalty = (0.20 + min((stale_count - 1) * 0.10, 0.20)) if stale_count > 0 else 0.0
     if temporal_analysis.get("risk_score", 0.0) > 0.3:
-        temporal_penalty += 0.10
+        temporal_penalty = max(temporal_penalty, 0.35)
         
     credibility -= temporal_penalty
     credibility = float(max(0.0, min(1.0, credibility)))
@@ -815,10 +834,14 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         category = "Likely Real"
         credibility = max(credibility, 0.65)
         
-    # Apply evidence sufficiency fallback only for borderline/neutral credibility (0.45 to 0.58)
-    if not is_sufficient and not is_factcheck_article and 0.45 <= credibility <= 0.58:
-        category = "Uncertain"
-        reliability = min(reliability, 0.40)
+    # Apply evidence sufficiency fallback: if there is no evidence and source is untrusted,
+    # cap credibility and verdict at 'Uncertain' to prevent false-positives on unverified/AI articles.
+    if not is_sufficient and not is_factcheck_article:
+        if credibility > 0.58:
+            credibility = 0.58
+        if credibility >= 0.45:
+            category = "Uncertain"
+            reliability = min(reliability, 0.40)
 
         
     # Final adjusted confidence — blend reliability with stance and evidence strength
@@ -845,16 +868,17 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         
     final_prediction = "REAL" if credibility >= threshold else "FAKE"
     
-    # Satire override
-    if is_satire and satire_score > 0.65:
-        final_prediction = "FAKE"
-        category = "Satire / Parody"
-        credibility = min(credibility, 0.35)
-        
     # Sub-classification flags
     is_clickbait = clickbait_score > 0.6
     is_ai_generated = ai_score > 0.75
     is_satire = is_satire or (source_profile.get("category") in ["Satire / Parody", "Parody"] if source_profile else False)
+    
+    # Satire override
+    if is_satire or satire_score > 0.42:
+        is_satire = True
+        final_prediction = "FAKE"
+        category = "Satire / Parody"
+        credibility = min(credibility, 0.35)
 
     
     # Risk Factor Breakdown

@@ -252,6 +252,27 @@ class ClaimVerifier:
 
         return results
 
+    def _check_entity_mismatch(self, claim: str, match_text: str) -> bool:
+        # Find proper nouns/capitalized words in the claim (excluding the first word of the sentence)
+        words = claim.split()
+        if len(words) <= 1:
+            return False
+        
+        # Proper nouns: capitalized words that do not start the sentence
+        proper_nouns = []
+        for w in words[1:]:
+            cleaned = re.sub(r'[^\w]', '', w)
+            if cleaned and cleaned[0].isupper() and len(cleaned) > 2:
+                proper_nouns.append(cleaned.lower())
+                
+        if not proper_nouns:
+            return False
+            
+        # Check if at least one of these proper nouns is found in match_text
+        match_text_lower = match_text.lower()
+        has_match = any(pn in match_text_lower for pn in proper_nouns)
+        return not has_match
+
     # ------------------------------------------------------------------
     # Intelligence Features: Negation, Temporal, and Quality Analysis
     # ------------------------------------------------------------------
@@ -286,34 +307,40 @@ class ClaimVerifier:
 
     def _analyze_temporal_consistency(self, text: str, verification_results: List[Dict]) -> Dict:
         years = [int(y) for y in re.findall(r'\b(19\d{2}|20[0-2]\d)\b', text)]
-        if not years:
-            return {"is_consistent": True, "risk_score": 0.0, "reason": "No date markers detected.", "detected_years": []}
-
-        min_year = min(years)
-        max_year = max(years)
         current_year = 2026  # Time anchor
 
         mismatches = []
         risk_score = 0.0
-
-        # Outdated event recycling check
-        is_breaking = any(kw in text.lower() for kw in ["breaking", "now", "today", "yesterday", "recently", "current", "latest", "new", "record", "this week"])
-        if is_breaking and max_year < current_year - 3:
-            mismatches.append(f"Outdated content: Article references events from {max_year} as breaking/current.")
-            risk_score += 0.4
-
-        # Mismatched timeline check
+        
+        # Collect years from verification results
         evidence_years = []
         for ev in verification_results:
             ev_str = ev.get("claim", "") + " " + str(ev.get("factcheck_results", "")) + " " + str(ev.get("wikipedia_results", ""))
             ev_yrs = [int(y) for y in re.findall(r'\b(19\d{2}|20[0-2]\d)\b', ev_str)]
             evidence_years.extend(ev_yrs)
 
-        if evidence_years:
-            avg_ev_year = sum(evidence_years) / len(evidence_years)
-            if max_year >= current_year and avg_ev_year < current_year - 4:
-                mismatches.append(f"Timeline drift: Claim focuses on timeline ({max_year}) but fact-checks were archived around {int(avg_ev_year)}.")
-                risk_score += 0.3
+        # Outdated event recycling check
+        is_breaking = any(kw in text.lower() for kw in ["breaking", "now", "today", "yesterday", "recently", "current", "latest", "new", "record", "this week"])
+        
+        if years:
+            min_year = min(years)
+            max_year = max(years)
+            if is_breaking and max_year < current_year - 3:
+                mismatches.append(f"Outdated content: Article references events from {max_year} as breaking/current.")
+                risk_score += 0.4
+                
+            if evidence_years:
+                avg_ev_year = sum(evidence_years) / len(evidence_years)
+                if max_year >= current_year and avg_ev_year < current_year - 4:
+                    mismatches.append(f"Timeline drift: Claim focuses on timeline ({max_year}) but fact-checks were archived around {int(avg_ev_year)}.")
+                    risk_score += 0.3
+                    
+        # Outdated entity/event recycling check (when no years in text, but freshness claims exist)
+        if is_breaking and evidence_years:
+            max_ev_year = max(evidence_years)
+            if max_ev_year < current_year - 4:
+                mismatches.append(f"Outdated entity/event recycling: Article claims event is current/breaking, but related evidence is from {max_ev_year} or earlier.")
+                risk_score += 0.5
 
         return {
             "is_consistent": len(mismatches) == 0,
@@ -370,18 +397,23 @@ class ClaimVerifier:
                 if fc_results:
                     for fc in fc_results:
                         rating = fc.get("rating", "").lower()
-                        is_contr = self._detect_contradiction(claim, rating)
+                        is_mismatch = self._check_entity_mismatch(claim, fc.get("claim_text", "") + " " + rating)
                         
-                        # Calculate retrieval quality score
-                        relevance = 0.8  # Google Fact check queries are highly relevant
+                        if is_mismatch:
+                            relevance = 0.05
+                            is_contr = False
+                        else:
+                            relevance = 0.8  # Google Fact check queries are highly relevant
+                            is_contr = self._detect_contradiction(claim, rating)
+                        
                         ev_quality = fc["trust_score"] * 0.4 + fc["recency_score"] * 0.2 + relevance * 0.4
                         quality_accumulator += ev_quality
                         total_evidence_pieces += 1
 
-                        if is_contr:
+                        if not is_mismatch and is_contr:
                             contradicting += 1
                             fc["verdict_class"] = "CONTRADICTED"
-                        else:
+                        elif not is_mismatch:
                             # Positive match keywords
                             positives = {"true", "correct", "accurate", "mostly true", "verified", "supported"}
                             if any(pos in rating for pos in positives):
@@ -389,20 +421,29 @@ class ClaimVerifier:
                                 fc["verdict_class"] = "VERIFIED"
                             else:
                                 fc["verdict_class"] = "UNVERIFIED"
+                        else:
+                            fc["verdict_class"] = "UNVERIFIED"
 
                 # Check Wikipedia
                 if wiki_results:
                     for wk in wiki_results:
-                        is_contr = self._detect_contradiction(claim, wk.get("summary", ""))
-                        relevance = wk.get("relevance_score", 0.5)
+                        is_mismatch = self._check_entity_mismatch(claim, wk.get("title", "") + " " + wk.get("summary", ""))
+                        
+                        if is_mismatch:
+                            relevance = 0.05
+                            is_contr = False
+                        else:
+                            relevance = wk.get("relevance_score", 0.5)
+                            is_contr = self._detect_contradiction(claim, wk.get("summary", ""))
+                            
                         ev_quality = wk["trust_score"] * 0.4 + wk["recency_score"] * 0.2 + relevance * 0.4
                         quality_accumulator += ev_quality
                         total_evidence_pieces += 1
 
-                        if is_contr:
+                        if not is_mismatch and is_contr:
                             contradicting += 1
                             wk["verdict_class"] = "CONTRADICTED"
-                        elif relevance > 0.65:
+                        elif not is_mismatch and relevance > 0.65:
                             supporting += 1
                             wk["verdict_class"] = "VERIFIED"
                         else:

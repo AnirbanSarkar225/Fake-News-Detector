@@ -43,12 +43,24 @@ class SatireDetector:
             re.compile(r'\b(?:according to a report published by the department of|spokesperson confirmed that)\b', re.IGNORECASE),
             re.compile(r'\b(?:reported that a local|reports indicate that the local|officials confirm that the)\b', re.IGNORECASE),
             
+            # Legislative/Institutional absurdist parody
+            re.compile(r'\b(?:passes?|passed)\s+bill\s+requiring\b', re.IGNORECASE),
+            re.compile(r'\b(?:approved|approves)\s+(?:a\s+)?measure\s+that\s+would\s+force\b', re.IGNORECASE),
+            re.compile(r'\bvote\s+to\s+require\b', re.IGNORECASE),
+            re.compile(r'\bunder\s+the\s+new\s+(?:regulations|rules)\b', re.IGNORECASE),
+            re.compile(r'\btake\s+effect\s+(?:next\s+month|immediately)\b', re.IGNORECASE),
+            re.compile(r'\b(?:bipartisan\s+vote|bipartisan\s+effort)\b', re.IGNORECASE),
+            re.compile(r'\blegally\s+required\s+to\s+complete\b', re.IGNORECASE),
+            re.compile(r'\bprove\s+they\s+are\s+not\s+(?:robots?|artificial\s+intelligence|bots?)\b', re.IGNORECASE),
+            re.compile(r'\b(?:agreement before breathing|before inhaling ambient air|breathing without clicking|100-hour\s+captcha)\b', re.IGNORECASE),
+            
             # Ironic juxtaposition / comedic phrasing
             re.compile(r'\b(?:despite having absolutely no|while completely ignoring the fact that)\b', re.IGNORECASE),
             re.compile(r'\b(?:solely for the purpose of|which is definitely a real thing)\b', re.IGNORECASE),
             re.compile(r'\b(?:in hopes of finally|in an attempt to seem|in a desperate bid to)\b', re.IGNORECASE),
             re.compile(r'\b(?:strongly denies that they have any connection to the|denied rumors that)\b', re.IGNORECASE)
         ]
+
 
     def detect(self, text: str, url: Optional[str] = None) -> Dict:
         """

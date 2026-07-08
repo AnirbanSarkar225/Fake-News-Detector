@@ -1675,6 +1675,25 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         sentiment_bias * w_sentiment
     )
 
+    # ── ML Confidence Anchoring ──
+    # Problem: well-written fake news scores high on NLP quality (no red flags,
+    # clean grammar), inflating credibility above the threshold even when the
+    # trained ML model said FAKE. The ML model is the ONLY component trained on
+    # labeled data, so its confident predictions should anchor the final score.
+    #
+    # When ML is confident FAKE (ml_score < 0.42) and no external signals
+    # (source trust, fact-check) exist to contradict it, cap credibility so
+    # auxiliary signals cannot single-handedly flip the verdict.
+    if not has_source_signal and not has_factcheck_signal:
+        if ml_score < 0.42:
+            # ML is fairly confident this is FAKE — cap credibility
+            ml_anchor_cap = 0.35 + ml_score * 0.35  # range: 0.35 to 0.497
+            credibility = min(credibility, ml_anchor_cap)
+        elif ml_score < 0.48:
+            # ML is leaning FAKE but not very confident — soft cap
+            ml_anchor_cap = 0.42 + ml_score * 0.20  # range: 0.42 to 0.516
+            credibility = min(credibility, ml_anchor_cap)
+
     
     # ── Stance-aware adjustment ──
     if article_stance == "REFUTES" and stance_confidence >= 0.2:
@@ -1755,9 +1774,9 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
                 stale_years_found.append(year_val)
                 stale_count += 1
                 
-    temporal_penalty = min(stale_count * 0.10, 0.30)
+    temporal_penalty = (0.20 + min((stale_count - 1) * 0.10, 0.20)) if stale_count > 0 else 0.0
     if temporal_analysis.get("risk_score", 0.0) > 0.3:
-        temporal_penalty += 0.10
+        temporal_penalty = max(temporal_penalty, 0.35)
         
     credibility -= temporal_penalty
     credibility = float(max(0.0, min(1.0, credibility)))
@@ -1806,10 +1825,14 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         category = "Likely Real"
         credibility = max(credibility, 0.65)
         
-    # Apply evidence sufficiency fallback only for borderline/neutral credibility (0.45 to 0.58)
-    if not is_sufficient and not is_factcheck_article and 0.45 <= credibility <= 0.58:
-        category = "Uncertain"
-        reliability = min(reliability, 0.40)
+    # Apply evidence sufficiency fallback: if there is no evidence and source is untrusted,
+    # cap credibility and verdict at 'Uncertain' to prevent false-positives on unverified/AI articles.
+    if not is_sufficient and not is_factcheck_article:
+        if credibility > 0.58:
+            credibility = 0.58
+        if credibility >= 0.45:
+            category = "Uncertain"
+            reliability = min(reliability, 0.40)
 
         
     # Final adjusted confidence — blend reliability with stance and evidence strength
@@ -1836,16 +1859,17 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         
     final_prediction = "REAL" if credibility >= threshold else "FAKE"
     
-    # Satire override
-    if is_satire and satire_score > 0.65:
-        final_prediction = "FAKE"
-        category = "Satire / Parody"
-        credibility = min(credibility, 0.35)
-        
     # Sub-classification flags
     is_clickbait = clickbait_score > 0.6
     is_ai_generated = ai_score > 0.75
     is_satire = is_satire or (source_profile.get("category") in ["Satire / Parody", "Parody"] if source_profile else False)
+    
+    # Satire override
+    if is_satire or satire_score > 0.42:
+        is_satire = True
+        final_prediction = "FAKE"
+        category = "Satire / Parody"
+        credibility = min(credibility, 0.35)
 
     
     # Risk Factor Breakdown
@@ -2287,7 +2311,7 @@ def save_feedback(email, text, model_prediction, user_verdict, rating, notes):
     cursor.execute("""
         INSERT INTO feedback (user_email, text, model_prediction, user_verdict, rating, notes)
         VALUES (?, ?, ?, ?, ?, ?)
-    """, (email, text[:500], model_prediction, user_verdict, rating, notes[:1000]))
+    """, (email, text, model_prediction, user_verdict, rating, notes[:1000]))
     conn.commit()
     feedback_id = cursor.lastrowid
     conn.close()
@@ -2584,7 +2608,7 @@ def render_login():
                         if success:
                             st.session_state.login_message = ("success", f"📨 Verification code sent to **{email_input}**!")
                         else:
-                            st.session_state.login_message = ("html", f"<div style='background:rgba(212,155,76,0.08); border:1px solid rgba(212,155,76,0.25); border-radius:12px; padding:1rem 1.2rem;'>💡 <b>Developer Mock Mode Active</b><br>We generated OTP: <span style='font-size:1.4rem; color:var(--accent); font-weight:bold;'>{otp}</span><br><span style='font-size:0.8rem; color:var(--text-muted);'>Reason: SMTP credentials not set in env variables. Copy the OTP code above to sign in.</span></div>")
+                            st.session_state.login_message = ("html", "<div style='background:rgba(212,155,76,0.08); border:1px solid rgba(212,155,76,0.25); border-radius:12px; padding:1rem 1.2rem;'>💡 <b>Developer Mock Mode Active</b><br>SMTP credentials are not configured. The generated OTP has been printed to the developer console/terminal logs. Please check your console to retrieve the code and sign in.</div>")
                         st.rerun()
                     else:
                         st.error("⚠️ Please enter a valid email address.")
@@ -2643,7 +2667,7 @@ def render_login():
                     if success:
                         st.session_state.login_message = ("success", f"New verification code sent to **{st.session_state.email}**!")
                     else:
-                        st.session_state.login_message = ("html", f"<div style='background:rgba(212,155,76,0.08); border:1px solid rgba(212,155,76,0.25); border-radius:12px; padding:1rem 1.2rem;'>💡 <b>Developer Mock Mode Active</b><br>We generated OTP: <span style='font-size:1.4rem; color:var(--accent); font-weight:bold;'>{otp}</span></div>")
+                        st.session_state.login_message = ("html", "<div style='background:rgba(212,155,76,0.08); border:1px solid rgba(212,155,76,0.25); border-radius:12px; padding:1rem 1.2rem;'>💡 <b>Developer Mock Mode Active</b><br>The generated OTP has been printed to the developer console/terminal logs. Please retrieve the code from the console.</div>")
                     st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
                 
@@ -2784,6 +2808,8 @@ def load_history_callback(text):
 
 def render_feedback_page():
     """Render the user feedback page."""
+    is_auto_redirect = st.session_state.get("pending_feedback", False)
+    
     # Title
     st.markdown("""
     <div class="landing-hero">
@@ -2804,10 +2830,29 @@ def render_feedback_page():
     results = analysis_results["results"]
     analysis_text = analysis_results["analysis_text"]
     
-    # Back button
-    if st.button("← Back to Dashboard", key="feedback_back_top", width='content'):
-        st.session_state.page = "dashboard"
-        st.rerun()
+    # Show auto-redirect banner if this was triggered after analysis
+    if is_auto_redirect:
+        st.markdown("""
+        <div style="background: rgba(245,158,11,0.06); border: 1px solid rgba(245,158,11,0.2); border-radius: 12px; padding: 1rem 1.5rem; margin-bottom: 1rem; text-align: center;">
+            <span style="font-size: 1.1rem;">🎯</span>
+            <span style="color: var(--accent); font-weight: 600; font-size: 0.95rem;"> Help us improve!</span>
+            <span style="color: var(--text-secondary); font-size: 0.85rem;"> — Quick feedback on this prediction trains our AI to be smarter.</span>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Navigation buttons: Back + Skip
+    col_nav_back, col_nav_skip = st.columns([1, 1])
+    with col_nav_back:
+        if st.button("← Back to Results", key="feedback_back_top", width='stretch'):
+            st.session_state.pending_feedback = False
+            st.session_state.page = "dashboard"
+            st.rerun()
+    with col_nav_skip:
+        if is_auto_redirect:
+            if st.button("⏭️ Skip Feedback", key="feedback_skip_btn", width='stretch'):
+                st.session_state.pending_feedback = False
+                st.session_state.page = "dashboard"
+                st.rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -2845,6 +2890,7 @@ def render_feedback_page():
                     "prediction": results['prediction'],
                     "rating": rating
                 }
+                st.session_state.pending_feedback = False
                 st.rerun()
                 
             if "feedback_submitted" in st.session_state:
@@ -2881,6 +2927,7 @@ def render_feedback_page():
             
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("← Go to Dashboard", key="feedback_back_bottom", width='stretch'):
+                st.session_state.pending_feedback = False
                 st.session_state.page = "dashboard"
                 st.rerun()
 
@@ -3190,6 +3237,11 @@ def render_dashboard():
                 "url_input": url_input,
                 "input_mode": input_mode
             }
+
+            # Auto-redirect to feedback page after every analysis
+            st.session_state.pending_feedback = True
+            st.session_state.page = "feedback"
+            st.rerun()
 
         # Check if we should render previously computed results from session state
         if st.session_state.get("analysis_results") is not None:
@@ -4369,6 +4421,8 @@ def main():
         st.session_state.login_message = None
     if "otp_sent_time" not in st.session_state:
         st.session_state.otp_sent_time = None
+    if "pending_feedback" not in st.session_state:
+        st.session_state.pending_feedback = False
 
     if st.session_state.page in ("landing", "login"):
         st.markdown(f"""
