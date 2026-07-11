@@ -24,13 +24,20 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, PROJECT_ROOT)
+
+# Load .env file for credentials
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
+except ImportError:
+    pass
 MODEL_PATH = os.path.join(PROJECT_ROOT, "model", "fake_news_model.pkl")
 PREPROCESSOR_PATH = os.path.join(PROJECT_ROOT, "model", "preprocessor.pkl")
 NEWS_CSV_PATH = os.path.join(PROJECT_ROOT, "data", "news.csv")
 
 # Google Fact Check Tools API Endpoint (Uses standard query for latest claims)
 # Replace 'YOUR_GOOGLE_API_KEY' with your actual free API key from Google Cloud Console.
-API_KEY = "AIzaSyC27TYhEGCJaOJ6gwcM8fvaUundJBpbwls"
+API_KEY = os.environ.get("GOOGLE_FACTCHECK_API_KEY", "")
 GOOGLE_FACTCHECK_URL = f"https://factchecktools.googleapis.com/v1alpha1/claims:search"
 
 # Check interval: 30 minutes (1,800 seconds)
@@ -73,15 +80,26 @@ def fetch_and_update_model():
             "query": query_term
         }
 
-        try:
-            response = requests.get(GOOGLE_FACTCHECK_URL, params=params, timeout=30)
-            response.raise_for_status()
-            data = response.json()
-            claims = data.get("claims", [])
-            all_claims.extend(claims)
-            print(f"   ✓ Fetched {len(claims)} claims for query '{query_term}'")
-        except Exception as e:
-            print(f"   ⚠️ API call failed for query '{query_term}': {e}")
+        for attempt in range(3):
+            try:
+                response = requests.get(GOOGLE_FACTCHECK_URL, params=params, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+                claims = data.get("claims", [])
+                all_claims.extend(claims)
+                print(f"   ✓ Fetched {len(claims)} claims for query '{query_term}'")
+                break
+            except requests.exceptions.HTTPError as e:
+                if response.status_code >= 500 and attempt < 2:
+                    wait = 2 ** (attempt + 1)
+                    print(f"   ⏳ Server error for '{query_term}', retrying in {wait}s... (attempt {attempt+1}/3)")
+                    time.sleep(wait)
+                else:
+                    print(f"   ⚠️ API call failed for query '{query_term}': {e}")
+                    break
+            except Exception as e:
+                print(f"   ⚠️ API call failed for query '{query_term}': {e}")
+                break
 
     new_texts = []
     new_labels = []

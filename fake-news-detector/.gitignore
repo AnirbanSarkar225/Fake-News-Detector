@@ -48,3 +48,12 @@ secrets.toml
 data/truthshield.db
 *.db
 
+# Streamlit credentials
+.streamlit/credentials.toml
+
+# IDE type checker config
+config/pyrightconfig.json
+
+# Test data subdirectory
+data/test data/
+

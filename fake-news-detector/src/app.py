@@ -12,6 +12,13 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(PROJECT_ROOT, '.env'))
+except ImportError:
+    pass
+
 import joblib
 import streamlit as st
 import plotly.graph_objects as go
@@ -52,7 +59,7 @@ def email_to_display_name(email):
     """Extract a human-readable display name from an email address (Canva-style).
     
     Examples:
-        anirban.sarkar@gmail.com  -> Anirban Sarkar
+        user.name@gmail.com  -> User Name
         john_doe123@outlook.com   -> John Doe
         priya-sharma@yahoo.com    -> Priya Sharma
         ceo@company.io            -> Ceo
@@ -2346,7 +2353,20 @@ def get_misclassified_articles():
     return rows
 
 def load_smtp_config():
-    """Load SMTP configurations from local storage."""
+    """Load SMTP configurations from environment variables, falling back to local storage."""
+    # First try: environment variables (loaded from .env by dotenv)
+    env_user = os.environ.get("SMTP_USER", "")
+    env_password = os.environ.get("SMTP_PASSWORD", "")
+    env_server = os.environ.get("SMTP_SERVER", "")
+    env_port = os.environ.get("SMTP_PORT", "")
+    if env_user and env_password:
+        return {
+            "smtp_user": env_user,
+            "smtp_password": env_password,
+            "smtp_server": env_server or "smtp.gmail.com",
+            "smtp_port": int(env_port) if env_port else 587
+        }
+    # Fallback: JSON config file
     config_path = os.path.join(PROJECT_ROOT, "assets", "smtp_config.json")
     if os.path.exists(config_path):
         try:
@@ -2649,16 +2669,21 @@ def render_login():
                 elapsed = now - sent_time
                 remaining = max(0, int(360 - elapsed))
                 
+                # Hidden Streamlit button (kept in DOM but invisible so JS can click it)
                 st.markdown("""
                 <style>
                 .hidden-btn-container {
-                    display: none !important;
+                    visibility: hidden !important;
+                    height: 0px !important;
+                    overflow: hidden !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
                 }
                 </style>
                 """, unsafe_allow_html=True)
                 
                 st.markdown('<div class="hidden-btn-container">', unsafe_allow_html=True)
-                if st.button("Resend OTP Trigger", key="resend_otp_trigger_btn", width='content'):
+                if st.button("Resend OTP", key="resend_otp_trigger_btn", width='content'):
                     otp = str(random.randint(100000, 999999))
                     st.session_state.otp_code = otp
                     st.session_state.otp_sent_time = time.time()
@@ -2671,18 +2696,9 @@ def render_login():
                     st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
                 
-                _st_components = st.components  # type: ignore[attr-defined]
-                _st_components.v1.html(f"""
+                st.html(f"""
                 <style>
                 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&family=Inter:wght@400;600;700&display=swap');
-                
-                :root {{
-                    --font-heading: 'Space Grotesk', 'Inter', sans-serif;
-                    --font-body: 'Inter', -apple-system, sans-serif;
-                    --accent: #F59E0B;
-                    --brass: #F59E0B;
-                    --text-primary: #E2E8F0;
-                }}
                 
                 body {{
                     background: transparent;
@@ -2699,7 +2715,7 @@ def render_login():
                     border: none;
                     border-radius: 10px;
                     padding: 0.75rem 2rem;
-                    font-family: var(--font-heading);
+                    font-family: 'Space Grotesk', 'Inter', sans-serif;
                     font-weight: 700;
                     font-size: 0.95rem;
                     letter-spacing: 0.5px;
@@ -2761,7 +2777,7 @@ def render_login():
                     
                     if (remaining > 0) {{
                         const interval = setInterval(() => {{
-                            remaining--;
+                            remaining = remaining - 1;
                             updateButton();
                             if (remaining <= 0) {{
                                 clearInterval(interval);
@@ -2772,20 +2788,26 @@ def render_login():
                     btn.addEventListener("click", () => {{
                         if (remaining <= 0) {{
                             try {{
-                                const buttons = Array.from(window.parent.document.querySelectorAll('button'));
-                                const triggerBtn = buttons.find(b => b.textContent.includes('Resend OTP Trigger'));
+                                const buttons = Array.from(document.querySelectorAll('button'));
+                                const triggerBtn = buttons.find(b => b.textContent.trim() === 'Resend OTP');
                                 if (triggerBtn) {{
                                     triggerBtn.click();
                                 }} else {{
-                                    console.error("Could not find Resend OTP Trigger button in parent window");
+                                    // Fallback: try partial match
+                                    const fallback = buttons.find(b => b.textContent.includes('Resend OTP'));
+                                    if (fallback) {{
+                                        fallback.click();
+                                    }} else {{
+                                        console.error("Could not find Resend OTP button");
+                                    }}
                                 }}
                             }} catch(e) {{
-                                console.error("Error clicking parent button:", e);
+                                console.error("Error clicking button:", e);
                             }}
                         }}
                     }});
                 </script>
-                """, height=52)
+                """)
             st.markdown("<hr style='border-color: rgba(255,255,255,0.05);'>", unsafe_allow_html=True)
             
             if st.button("⬅ Back to Homepage", width='stretch', key="back_to_home_btn"):
@@ -3238,9 +3260,9 @@ def render_dashboard():
                 "input_mode": input_mode
             }
 
-            # Auto-redirect to feedback page after every analysis
+            # Mark analysis as complete and start the feedback timer (delayed redirect)
             st.session_state.pending_feedback = True
-            st.session_state.page = "feedback"
+            st.session_state.analysis_completed_time = time.time()
             st.rerun()
 
         # Check if we should render previously computed results from session state
@@ -3259,6 +3281,48 @@ def render_dashboard():
             
             st.markdown("---")
             st.markdown("### 🔍 Live Investigation Workspace")
+
+            # Show auto-redirect timer banner if pending_feedback is active
+            if st.session_state.get("pending_feedback") and st.session_state.get("analysis_completed_time"):
+                elapsed = time.time() - st.session_state.analysis_completed_time
+                remaining = max(0, 120 - int(elapsed))
+                
+                if remaining <= 0:
+                    st.session_state.pending_feedback = False
+                    st.session_state.page = "feedback"
+                    st.rerun()
+                else:
+                    st.html(f"""
+                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: rgba(229, 193, 88, 0.04); border: 1px solid rgba(229, 193, 88, 0.2); border-radius: 8px; padding: 12px 18px; display: flex; justify-content: space-between; align-items: center; color: #EDEDED; font-size: 14px; margin-bottom: 0.5rem; backdrop-filter: blur(8px);">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 1.15rem;">⏱️</span>
+                            <span>Redirecting to <b>Accuracy Calibration (Feedback)</b> in <span id="ts-timer" style="color: #E5C158; font-weight: bold; font-family: monospace; font-size: 1.1rem;">{remaining}</span> seconds...</span>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button onclick="tsGoNow()" style="background: #E5C158; color: #0B0F14; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; transition: background 0.2s;">Calibrate Now</button>
+                            <button onclick="tsCancelTimer()" style="background: rgba(255,255,255,0.05); color: #EDEDED; border: 1px solid rgba(255,255,255,0.1); padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: background 0.2s;">Cancel Timer</button>
+                        </div>
+                    </div>
+                    <script>
+                        var tsRemaining = {remaining};
+                        var tsTimerSpan = document.getElementById("ts-timer");
+                        var tsInterval = setInterval(function() {{
+                            tsRemaining = tsRemaining - 1;
+                            if (tsTimerSpan) tsTimerSpan.textContent = tsRemaining;
+                            if (tsRemaining <= 0) {{
+                                clearInterval(tsInterval);
+                                window.location.search = "?page=feedback";
+                            }}
+                        }}, 1000);
+                        
+                        function tsGoNow() {{
+                            window.location.search = "?page=feedback";
+                        }}
+                        function tsCancelTimer() {{
+                            window.location.search = "?cancel_redirect=1";
+                        }}
+                    </script>
+                    """)
 
             cat = results['category']
             
@@ -4386,6 +4450,22 @@ def render_dashboard():
 
 
 def main():
+    # Parse query parameters for redirecting
+    if "page" in st.query_params:
+        page_val = st.query_params["page"]
+        if page_val == "feedback":
+            for k in list(st.query_params.keys()):
+                del st.query_params[k]
+            st.session_state.page = "feedback"
+            st.session_state.pending_feedback = True
+            st.rerun()
+
+    if "cancel_redirect" in st.query_params:
+        for k in list(st.query_params.keys()):
+            del st.query_params[k]
+        st.session_state.pending_feedback = False
+        st.rerun()
+
     # Initialize the local SQLite database
     try:
         init_db()
@@ -4423,6 +4503,8 @@ def main():
         st.session_state.otp_sent_time = None
     if "pending_feedback" not in st.session_state:
         st.session_state.pending_feedback = False
+    if "analysis_completed_time" not in st.session_state:
+        st.session_state.analysis_completed_time = None
 
     if st.session_state.page in ("landing", "login"):
         st.markdown(f"""
@@ -4455,12 +4537,11 @@ def main():
         render_feedback_page()
 
     # Inject JavaScript scroll-reveal animation using iframe component
-    st.components.v1.html(  # type: ignore[attr-defined]
+    st.html(
         """
     <script>
-        const parentDoc = window.parent.document;
-        if (!parentDoc.getElementById('scroll-reveal-style')) {
-            const style = parentDoc.createElement('style');
+        if (!document.getElementById('scroll-reveal-style')) {
+            const style = document.createElement('style');
             style.id = 'scroll-reveal-style';
             style.textContent = `
                 .scroll-reveal {
@@ -4478,7 +4559,7 @@ def main():
                     filter: blur(0) !important;
                 }
             `;
-            parentDoc.head.appendChild(style);
+            document.head.appendChild(style);
         }
 
         const observerOptions = {
@@ -4496,7 +4577,7 @@ def main():
         }, observerOptions);
 
         function setupReveal() {
-            const targets = parentDoc.querySelectorAll('div[data-testid="stVerticalBlockBorderWrapper"], .metric-card, .info-box, .verdict-real, .verdict-fake, .verdict-uncertain, .stAlert, .sentence-high, .sentence-medium, .sentence-low');
+            const targets = document.querySelectorAll('div[data-testid="stVerticalBlockBorderWrapper"], .metric-card, .info-box, .verdict-real, .verdict-fake, .verdict-uncertain, .stAlert, .sentence-high, .sentence-medium, .sentence-low');
             targets.forEach(el => {
                 if (!el.classList.contains('scroll-reveal')) {
                     el.classList.add('scroll-reveal');
@@ -4507,7 +4588,7 @@ def main():
         setInterval(setupReveal, 500);
         setupReveal();
     </script>
-    """, height=0)
+    """)
 
 if __name__ == "__main__":
     main()

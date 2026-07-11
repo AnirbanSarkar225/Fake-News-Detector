@@ -30,3 +30,4 @@ easyocr>=1.7
 lime>=0.2
 Pillow>=10.0
 google-api-python-client>=2.0
+python-dotenv

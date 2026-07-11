@@ -25,7 +25,7 @@ try:
 except ImportError:
     HAS_REQUESTS = False
 
-API_KEY: str = "AIzaSyC27TYhEGCJaOJ6gwcM8fvaUundJBpbwls"
+API_KEY: str = os.environ.get("GOOGLE_FACTCHECK_API_KEY", "")
 _REQUEST_TIMEOUT: int = 10  # seconds
 
 class ClaimVerifier:
