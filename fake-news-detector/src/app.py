@@ -32,13 +32,21 @@ import pandas as pd
 import time
 import math
 import tempfile
-import nltk
-from nltk.tokenize import sent_tokenize
+# nltk is deferred to first use (saves ~3s on startup)
+_sent_tokenize = None
 
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt', quiet=True)
+def _get_sent_tokenize():
+    """Lazy-load nltk sent_tokenize on first use."""
+    global _sent_tokenize
+    if _sent_tokenize is None:
+        import nltk
+        from nltk.tokenize import sent_tokenize as _st
+        try:
+            nltk.data.find('tokenizers/punkt')
+        except LookupError:
+            nltk.download('punkt', quiet=True)
+        _sent_tokenize = _st
+    return _sent_tokenize
 
 def get_base64_logo():
     """Load local logo and return as base64 data URI."""
@@ -115,17 +123,7 @@ def get_avatar_gradient(email):
 
 sys.path.insert(0, PROJECT_ROOT)
 from utils.preprocess import TextPreprocessor
-from utils.scraper import ArticleScraper
-from utils.nlp_engine import NLPEngine
 from utils.source_engine import SourceEngine
-from utils.pdf_generator import generate_credibility_pdf
-
-# India live news feed (optional — gracefully degrades if feedparser missing)
-try:
-    from utils.india_news_feed import IndiaNewsFeed
-    _india_feed = IndiaNewsFeed()
-except Exception:
-    _india_feed = None
 
 st.set_page_config(
     page_title="Fake News Detector — AI Credibility Analyzer",
@@ -723,11 +721,13 @@ def get_preprocessor():
 
 def get_scraper():
     """Initialize article scraper (not cached so code updates take effect)."""
+    from utils.scraper import ArticleScraper
     return ArticleScraper()
 
 
 @st.cache_resource
 def get_nlp_engine():
+    from utils.nlp_engine import NLPEngine
     return NLPEngine()
 
 
@@ -752,6 +752,22 @@ def get_ai_detector():
 def get_claim_verifier():
     from utils.claim_verifier import ClaimVerifier
     return ClaimVerifier()
+
+
+@st.cache_resource
+def _get_india_feed():
+    """Lazy-load India news feed (only when dashboard is accessed)."""
+    try:
+        from utils.india_news_feed import IndiaNewsFeed
+        return IndiaNewsFeed()
+    except Exception:
+        return None
+
+
+def _get_pdf_generator():
+    """Lazy-import PDF generator."""
+    from utils.pdf_generator import generate_credibility_pdf
+    return generate_credibility_pdf
 
 
 def create_knowledge_graph(results):
@@ -3014,6 +3030,7 @@ def render_dashboard():
         )
         st.markdown("---")
         with st.expander("🇮🇳 Live India News Feed", expanded=False):
+            _india_feed = _get_india_feed()
             if _india_feed is not None:
                 feed_category = st.selectbox(
                     "Category",
@@ -3370,6 +3387,7 @@ def render_dashboard():
                         st.markdown("#### 🔍 Extracted Claims & Suspicion")
                         sent_score_lookup = {sent: score for sent, score in results.get('sentence_analysis', [])}
                         try:
+                            sent_tokenize = _get_sent_tokenize()
                             original_sentences = sent_tokenize(analysis_text)
                         except Exception:
                             original_sentences = re.split(r'(?<=[.!?])\s+', analysis_text)
@@ -3516,6 +3534,7 @@ def render_dashboard():
                 title_prefix = " ".join(words_list[:6]) + ("..." if len(words_list) > 6 else "")
                 
                 try:
+                    generate_credibility_pdf = _get_pdf_generator()
                     pdf_bytes = generate_credibility_pdf(
                         title=title_prefix,
                         summary=summary_data,

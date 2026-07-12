@@ -80,7 +80,7 @@ def fetch_and_update_model():
             "query": query_term
         }
 
-        for attempt in range(3):
+        for attempt in range(5):
             try:
                 response = requests.get(GOOGLE_FACTCHECK_URL, params=params, timeout=30)
                 response.raise_for_status()
@@ -90,9 +90,9 @@ def fetch_and_update_model():
                 print(f"   ✓ Fetched {len(claims)} claims for query '{query_term}'")
                 break
             except requests.exceptions.HTTPError as e:
-                if response.status_code >= 500 and attempt < 2:
-                    wait = 2 ** (attempt + 1)
-                    print(f"   ⏳ Server error for '{query_term}', retrying in {wait}s... (attempt {attempt+1}/3)")
+                if response.status_code >= 500 and attempt < 4:
+                    wait = 3 * (2 ** attempt)  # 3s, 6s, 12s, 24s
+                    print(f"   ⏳ Server error for '{query_term}', retrying in {wait}s... (attempt {attempt+1}/5)")
                     time.sleep(wait)
                 else:
                     print(f"   ⚠️ API call failed for query '{query_term}': {e}")
@@ -100,6 +100,8 @@ def fetch_and_update_model():
             except Exception as e:
                 print(f"   ⚠️ API call failed for query '{query_term}': {e}")
                 break
+        # Brief delay between queries to avoid rate-limiting
+        time.sleep(1.5)
 
     new_texts = []
     new_labels = []

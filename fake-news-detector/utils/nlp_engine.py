@@ -26,34 +26,51 @@ try:
 except LookupError:
     nltk.download('vader_lexicon', quiet=True)
 
-# ── Optional imports with graceful fallbacks ──────────────────────────────
+# ── Optional imports — loaded lazily to speed up app startup ──────────────
 
-# VADER
+# VADER (lightweight, load eagerly)
 try:
     from nltk.sentiment.vader import SentimentIntensityAnalyzer
     _VADER_AVAILABLE = True
 except ImportError:
     _VADER_AVAILABLE = False
 
-# SHAP
-try:
-    import shap
-    _SHAP_AVAILABLE = True
-except ImportError:
-    _SHAP_AVAILABLE = False
+# SHAP — deferred to first use (takes ~3s to import)
+_SHAP_AVAILABLE = None  # None = not yet checked
+_shap_module = None
 
-# spaCy
-try:
-    import spacy
-    try:
-        _spacy_nlp = spacy.load("en_core_web_sm")
-        _SPACY_AVAILABLE = True
-    except OSError:
-        _spacy_nlp = None
-        _SPACY_AVAILABLE = False
-except ImportError:
-    _spacy_nlp = None
-    _SPACY_AVAILABLE = False
+def _get_shap():
+    """Lazy-load SHAP on first use."""
+    global _SHAP_AVAILABLE, _shap_module
+    if _SHAP_AVAILABLE is None:
+        try:
+            import shap
+            _shap_module = shap
+            _SHAP_AVAILABLE = True
+        except ImportError:
+            _SHAP_AVAILABLE = False
+    return _shap_module
+
+# spaCy — deferred to first use (takes ~12s to load model)
+_SPACY_AVAILABLE = None  # None = not yet checked
+_spacy_nlp = None
+
+def _get_spacy_nlp():
+    """Lazy-load spaCy NLP model on first use."""
+    global _SPACY_AVAILABLE, _spacy_nlp
+    if _SPACY_AVAILABLE is None:
+        try:
+            import spacy
+            try:
+                _spacy_nlp = spacy.load("en_core_web_sm")
+                _SPACY_AVAILABLE = True
+            except OSError:
+                _spacy_nlp = None
+                _SPACY_AVAILABLE = False
+        except ImportError:
+            _spacy_nlp = None
+            _SPACY_AVAILABLE = False
+    return _spacy_nlp
 
 
 class NLPEngine:
@@ -269,7 +286,8 @@ class NLPEngine:
         """
         result = {"shap_values": [], "base_value": 0.0, "predicted_value": 0.0, "available": False}
 
-        if not _SHAP_AVAILABLE or not text or len(text.strip()) == 0:
+        shap = _get_shap()
+        if not shap or not text or len(text.strip()) == 0:
             return result
 
         try:
@@ -401,15 +419,18 @@ class NLPEngine:
         if not text:
             return {"people": [], "organizations": [], "locations": [], "dates": [], "money": []}
 
-        if _SPACY_AVAILABLE and _spacy_nlp is not None:
-            return self._spacy_ner(text)
+        nlp = _get_spacy_nlp()
+        if nlp is not None:
+            return self._spacy_ner(text, nlp)
         else:
             return self._regex_ner(text)
 
-    def _spacy_ner(self, text):
+    def _spacy_ner(self, text, nlp=None):
         """spaCy-powered NER extraction."""
+        if nlp is None:
+            nlp = _get_spacy_nlp()
         # Limit text length for performance
-        doc = _spacy_nlp(text[:10000])
+        doc = nlp(text[:10000])
 
         people = set()
         orgs = set()
