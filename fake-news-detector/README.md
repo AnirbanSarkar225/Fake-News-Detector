@@ -346,5 +346,5 @@ MIT License — see [LICENSE](LICENSE) for details.
 ---
 
 <p align="center">
-  <sub>Built with ❤️ by <a href="https://github.com/AnirbanSarkar225">Anirban Sarkar</a></sub>
+  <sub>Built with passion by <a href="https://github.com/AnirbanSarkar225">Anirban Sarkar</a></sub>
 </p>
