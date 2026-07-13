@@ -126,7 +126,7 @@ from utils.preprocess import TextPreprocessor
 from utils.source_engine import SourceEngine
 
 st.set_page_config(
-    page_title="Fake News Detector — AI Credibility Analyzer",
+    page_title="TruthShield — Intelligence Platform",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -134,572 +134,855 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    /* ═══════════════════════════════════════════════════════════
+       TruthShield Intelligence Platform — Design System v3.0
+       Inspired by: Palantir · Linear · Vercel · Arc · Bloomberg
+       ═══════════════════════════════════════════════════════════ */
 
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+    /* ── Design Tokens ────────────────────────────────────────── */
     :root {
-        --bg-base: #0B0F14;
-        --bg-panel: rgba(255, 255, 255, 0.02);
-        --bg-panel-hover: rgba(255, 255, 255, 0.04);
-        --border-glass: rgba(255, 255, 255, 0.08);
-        --border-glass-hover: rgba(255, 255, 255, 0.12);
-        
-        --text-primary: #EDEDED;
-        --text-secondary: #A0A0A0;
-        --text-muted: #666666;
-
-        --gold-premium: #E5C158;
-        --gold-muted: rgba(229, 193, 88, 0.15);
-        
-        --success: #17B877;
-        --danger: #E5484D;
+        --bg-primary: #090A0D;
+        --bg-surface: #111318;
+        --bg-card: #151821;
+        --bg-card-hover: #1A1F2B;
+        --bg-input: #0E1117;
+        --border: rgba(255,255,255,.06);
+        --border-hover: rgba(255,255,255,.12);
+        --border-accent: rgba(231,198,90,.25);
+        --accent: #E7C65A;
+        --accent-hover: #F0D06A;
+        --accent-muted: rgba(231,198,90,.12);
+        --info: #4EA8FF;
+        --info-muted: rgba(78,168,255,.10);
+        --success: #42D392;
+        --success-muted: rgba(66,211,146,.10);
         --warning: #F5A623;
-        --info: #3B82F6;
-
-        --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-        --font-mono: 'JetBrains Mono', monospace;
-        --font-display: 'Space Grotesk', sans-serif;
-
-        /* Legacy aliases — referenced by inline HTML styles */
-        --accent: #E5C158;
-        --accent-secondary: #06B6D4;
-        --border-color: rgba(255, 255, 255, 0.08);
-        --brass: #E5C158;
-        --font-heading: 'Space Grotesk', 'Inter', sans-serif;
+        --warning-muted: rgba(245,166,35,.10);
+        --danger: #FF5A6B;
+        --danger-muted: rgba(255,90,107,.10);
+        --text-primary: #F3F4F8;
+        --text-secondary: #9EA3B5;
+        --text-muted: #666C7A;
+        --font-heading: 'Space Grotesk', -apple-system, sans-serif;
         --font-body: 'Inter', -apple-system, sans-serif;
-        --glass-border: rgba(255, 255, 255, 0.08);
+        --font-mono: 'JetBrains Mono', 'IBM Plex Mono', monospace;
+        --radius-sm: 8px;
+        --radius-md: 12px;
+        --radius-lg: 16px;
+        --radius-xl: 20px;
+        --shadow-sm: 0 1px 2px rgba(0,0,0,.2);
+        --shadow-md: 0 4px 12px rgba(0,0,0,.25);
+        --shadow-lg: 0 8px 32px rgba(0,0,0,.35);
+        --shadow-glow: 0 0 24px rgba(231,198,90,.08);
+        --transition: 250ms cubic-bezier(.4,0,.2,1);
+        --transition-fast: 150ms cubic-bezier(.4,0,.2,1);
     }
 
-    /* ── Core Reset & App ── */
+    /* ── Global Reset ─────────────────────────────────────────── */
     .stApp {
-        font-family: var(--font-sans) !important;
-        background-color: var(--bg-base) !important;
+        background: var(--bg-primary) !important;
         color: var(--text-primary) !important;
+        font-family: var(--font-body) !important;
     }
-    
-    [data-testid="block-container"] {
-        padding: 1.5rem 3rem 3rem 3rem !important;
+    .stApp > header { background: transparent !important; }
+    .block-container {
+        padding: 1.5rem 2rem 3rem !important;
         max-width: 1400px !important;
     }
-
-    /* ── Typography Elements ── */
-    h1, h2, h3, h4, h5, h6 {
-        font-family: var(--font-display) !important;
-        letter-spacing: -0.02em !important;
-        font-weight: 500 !important;
-    }
-
-    /* ── Reset container wrappers — remove all default chrome ── */
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        background: transparent !important;
-        border: none !important;
-        padding: 0 !important;
-        box-shadow: none !important;
-        backdrop-filter: none !important;
-    }
-    /* Let Streamlit's native bordered containers show through with our theme */
-    div[data-testid="stVerticalBlockBorderWrapper"] > div[style] {
-        border-color: var(--border-glass) !important;
-        border-radius: 8px !important;
-        background: rgba(255, 255, 255, 0.015) !important;
-        padding: 1.25rem !important;
-    }
-
-    /* ── Sidebar ── */
     [data-testid="stSidebar"] {
-        background-color: #0A0D11 !important;
-        border-right: 1px solid var(--border-glass) !important;
+        background: var(--bg-surface) !important;
+        border-right: 1px solid var(--border) !important;
     }
-    [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
-        padding: 1.5rem 1rem !important;
+    [data-testid="stSidebar"] .block-container {
+        padding: 1.5rem 1.25rem !important;
     }
-    [data-testid="stSidebar"] .stButton > button {
-        background: rgba(255,255,255,0.02) !important;
+    [data-testid="stSidebar"] [data-testid="stMarkdown"] p,
+    [data-testid="stSidebar"] [data-testid="stMarkdown"] li,
+    [data-testid="stSidebar"] .stRadio label,
+    [data-testid="stSidebar"] .stSelectbox label {
         color: var(--text-secondary) !important;
-        border: 1px solid rgba(255,255,255,0.05) !important;
-        font-family: var(--font-mono) !important;
-        font-size: 0.8rem !important;
-        padding: 0.4rem 1rem !important;
+        font-size: 0.82rem !important;
     }
-    [data-testid="stSidebar"] .stButton > button:hover {
-        background: rgba(229, 72, 77, 0.08) !important;
-        color: var(--danger) !important;
-        border-color: rgba(229, 72, 77, 0.15) !important;
+    [data-testid="stSidebar"] hr {
+        border-color: var(--border) !important;
+        margin: 0.75rem 0 !important;
     }
+    section[data-testid="stSidebar"] > div { padding-top: 0 !important; }
 
-    /* ── Top Intelligence Bar ── */
-    .top-intel-bar {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        width: 100%;
-        padding: 0.75rem 1.25rem;
-        background: var(--bg-panel);
-        backdrop-filter: blur(8px);
-        border: 1px solid var(--border-glass);
-        border-radius: 6px;
-        margin-bottom: 1.5rem;
-    }
-    .intel-logo-section { display: flex; align-items: center; gap: 10px; }
-    .intel-logo { font-size: 1.1rem; }
-    .intel-title {
-        font-family: var(--font-mono);
-        font-size: 0.85rem;
-        color: var(--text-primary);
-        font-weight: 500;
-        letter-spacing: 0.5px;
-    }
-    .intel-subtitle {
-        font-family: var(--font-mono);
-        font-size: 0.75rem;
-        color: var(--text-muted);
-        border-left: 1px solid var(--border-glass);
-        padding-left: 10px;
-    }
-    .intel-status-section {
-        display: flex;
-        gap: 1.25rem;
-        font-family: var(--font-mono);
-        font-size: 0.75rem;
-    }
-    .status-item {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        color: var(--text-secondary);
-    }
-    .status-dot { width: 5px; height: 5px; border-radius: 50%; }
-    .status-dot.green { background-color: var(--success); box-shadow: 0 0 6px rgba(23, 184, 119, 0.4); }
-    .intel-user-section { display: flex; align-items: center; gap: 8px; font-size: 0.75rem; }
-    .user-email { color: var(--text-secondary); font-family: var(--font-mono); }
-    .user-badge {
-        background: var(--gold-muted);
-        color: var(--gold-premium);
-        border: 1px solid rgba(229, 193, 88, 0.2);
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-weight: 500;
-        letter-spacing: 0.5px;
-    }
-
-    /* ── Landing Hero & Hero Header ── */
-    .landing-hero {
-        text-align: center;
-        padding: 3rem 1rem 2rem;
-    }
-    .landing-hero h1 {
-        font-family: var(--font-display) !important;
-        font-size: 2.2rem !important;
-        font-weight: 600 !important;
+    /* ── Typography ───────────────────────────────────────────── */
+    h1, h2, h3 {
+        font-family: var(--font-heading) !important;
         color: var(--text-primary) !important;
-        margin-bottom: 0.5rem;
+        letter-spacing: -0.02em !important;
+        font-weight: 600 !important;
     }
-    .landing-hero p {
-        font-size: 1rem;
-        color: var(--text-secondary);
+    h1 { font-size: 2rem !important; margin-bottom: 0.25rem !important; }
+    h2 { font-size: 1.35rem !important; margin-bottom: 0.2rem !important; }
+    h3 { font-size: 1.1rem !important; margin-bottom: 0.15rem !important; }
+    h4, h5, h6 {
+        font-family: var(--font-body) !important;
+        color: var(--text-secondary) !important;
+        font-weight: 500 !important;
+        font-size: 0.85rem !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.06em !important;
     }
-    .hero-divider {
-        width: 60px;
-        height: 3px;
-        background: var(--gold-premium);
-        margin: 1.25rem auto;
-        border-radius: 2px;
-    }
-    .hero-header {
-        text-align: center;
-        padding: 2rem 1rem 1rem;
+    p, li, span, label, div {
+        font-family: var(--font-body) !important;
     }
 
-    /* ── Right Intelligence Panel ── */
-    .right-panel-title {
-        font-family: var(--font-mono);
-        font-size: 0.72rem;
-        font-weight: 600;
-        letter-spacing: 1px;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        margin-bottom: 1rem;
+    /* ── Buttons ──────────────────────────────────────────────── */
+    .stButton > button {
+        background: var(--bg-card) !important;
+        color: var(--text-primary) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: var(--radius-md) !important;
+        font-family: var(--font-body) !important;
+        font-weight: 500 !important;
+        font-size: 0.85rem !important;
+        padding: 0.55rem 1.25rem !important;
+        transition: all var(--transition) !important;
+        letter-spacing: 0.01em !important;
     }
-    .right-intel-panel {
-        background: var(--bg-panel);
-        border: 1px solid var(--border-glass);
-        border-radius: 8px;
+    .stButton > button:hover {
+        background: var(--bg-card-hover) !important;
+        border-color: var(--border-hover) !important;
+        transform: translateY(-1px) !important;
+        box-shadow: var(--shadow-md) !important;
+    }
+    .stButton > button:active {
+        transform: translateY(0) !important;
+    }
+    .stButton > button[kind="primary"],
+    button[data-testid="stBaseButton-primary"] {
+        background: linear-gradient(135deg, var(--accent), #D4B44E) !important;
+        color: #0A0B0E !important;
+        border: none !important;
+        font-weight: 600 !important;
+    }
+    button[data-testid="stBaseButton-primary"]:hover {
+        background: linear-gradient(135deg, var(--accent-hover), #E0C15A) !important;
+        box-shadow: var(--shadow-glow), var(--shadow-md) !important;
+    }
+
+    /* ── Inputs ───────────────────────────────────────────────── */
+    .stTextInput > div > div,
+    .stTextArea > div > div {
+        background: var(--bg-input) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: var(--radius-md) !important;
+        color: var(--text-primary) !important;
+        font-family: var(--font-body) !important;
+        transition: border-color var(--transition) !important;
+    }
+    .stTextInput > div > div:focus-within,
+    .stTextArea > div > div:focus-within {
+        border-color: var(--accent) !important;
+        box-shadow: 0 0 0 2px var(--accent-muted) !important;
+    }
+    .stTextInput label, .stTextArea label,
+    .stSelectbox label, .stRadio label, .stSlider label {
+        color: var(--text-secondary) !important;
+        font-family: var(--font-body) !important;
+        font-size: 0.82rem !important;
+        font-weight: 500 !important;
+        letter-spacing: 0.02em !important;
+    }
+    .stSelectbox > div > div {
+        background: var(--bg-input) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: var(--radius-md) !important;
+    }
+
+    /* ── Cards ────────────────────────────────────────────────── */
+    .ts-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
         padding: 1.25rem;
-    }
-    .right-intel-panel.border-verified {
-        border-color: rgba(23, 184, 119, 0.3);
-    }
-    .right-intel-panel.border-uncertain {
-        border-color: rgba(245, 166, 35, 0.3);
-    }
-    .right-intel-panel.border-danger {
-        border-color: rgba(229, 72, 77, 0.3);
-    }
-
-    /* ── Intel Metrics (Progress Bars in Right Panel) ── */
-    .intel-metric-row {
-        margin-bottom: 0.75rem;
-    }
-    .intel-metric-label {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-size: 0.78rem;
-        color: var(--text-secondary);
-        margin-bottom: 0.3rem;
-        font-family: var(--font-sans);
-    }
-    .intel-progress-bg {
-        width: 100%;
-        height: 4px;
-        background: rgba(255, 255, 255, 0.06);
-        border-radius: 2px;
+        transition: all var(--transition);
+        position: relative;
         overflow: hidden;
     }
-    .intel-progress-bar {
-        height: 100%;
-        border-radius: 2px;
-        transition: width 0.6s ease;
+    .ts-card::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, rgba(255,255,255,.02) 0%, transparent 60%);
+        pointer-events: none;
     }
-    .intel-state-badge {
-        display: inline-block;
-        font-family: var(--font-mono);
-        font-size: 0.68rem;
-        font-weight: 600;
-        letter-spacing: 0.5px;
-        padding: 2px 8px;
-        border-radius: 4px;
+    .ts-card:hover {
+        border-color: var(--border-hover);
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-lg);
+    }
+    .ts-card-accent {
+        border-color: var(--border-accent);
+    }
+    .ts-card-accent::after {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 2px;
+        background: linear-gradient(90deg, var(--accent), transparent);
     }
 
-    /* ── Metric Cards ── */
+    /* ── Metric Cards ─────────────────────────────────────────── */
     .metric-card {
-        background: var(--bg-panel);
-        border: 1px solid var(--border-glass);
-        border-radius: 6px;
-        padding: 1rem;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 1rem 1.25rem;
         text-align: center;
-        transition: background 0.2s;
+        transition: all var(--transition);
     }
     .metric-card:hover {
-        background: var(--bg-panel-hover);
-    }
-    .metric-value {
-        font-family: var(--font-display);
-        font-size: 1.6rem;
-        font-weight: 600;
-        color: var(--text-primary);
+        border-color: var(--border-hover);
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
     }
     .metric-label {
-        font-family: var(--font-mono);
-        font-size: 0.65rem;
-        color: var(--text-secondary);
-        margin-top: 0.3rem;
+        font-family: var(--font-body);
+        font-size: 0.7rem;
+        font-weight: 500;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.08em;
+        color: var(--text-muted);
+        margin-bottom: 0.35rem;
+    }
+    .metric-value {
+        font-family: var(--font-mono);
+        font-size: 1.6rem;
+        font-weight: 600;
+        color: var(--accent);
+        line-height: 1.2;
     }
 
-    /* ── Flat Verdict Stamps ── */
-    .verdict-badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.25rem 0.6rem;
-        border-radius: 4px;
-        font-size: 0.75rem;
+    /* ── Verdict Badges ───────────────────────────────────────── */
+    .verdict-real, .verdict-authentic {
+        background: var(--success-muted);
+        color: var(--success);
+        border: 1px solid rgba(66,211,146,.2);
+        padding: 0.35rem 1rem;
+        border-radius: var(--radius-sm);
         font-family: var(--font-mono);
-        font-weight: 500;
-        letter-spacing: 0.02em;
-        border: 1px solid transparent;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        display: inline-block;
+    }
+    .verdict-fake, .verdict-misleading {
+        background: var(--danger-muted);
+        color: var(--danger);
+        border: 1px solid rgba(255,90,107,.2);
+        padding: 0.35rem 1rem;
+        border-radius: var(--radius-sm);
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        display: inline-block;
     }
     .verdict-uncertain {
-        background: rgba(245, 166, 35, 0.1);
+        background: var(--warning-muted);
         color: var(--warning);
-        border-color: rgba(245, 166, 35, 0.2);
+        border: 1px solid rgba(245,166,35,.2);
+        padding: 0.35rem 1rem;
+        border-radius: var(--radius-sm);
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        display: inline-block;
     }
     .verdict-clickbait {
-        background: rgba(59, 130, 246, 0.1);
-        color: var(--info);
-        border-color: rgba(59, 130, 246, 0.2);
-    }
-    .verdict-misleading {
-        background: rgba(229, 72, 77, 0.1);
-        color: var(--danger);
-        border-color: rgba(229, 72, 77, 0.2);
+        background: rgba(156,120,255,.10);
+        color: #9C78FF;
+        border: 1px solid rgba(156,120,255,.2);
+        padding: 0.35rem 1rem;
+        border-radius: var(--radius-sm);
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        display: inline-block;
     }
 
-    /* ── Sentence Tracks ── */
-    .sentence-high, .sentence-medium, .sentence-low {
-        padding: 0.75rem 1rem;
-        margin: 0.5rem 0;
-        border-radius: 4px;
-        font-size: 0.85rem;
-        line-height: 1.5;
-        border-left: 2px solid transparent;
-        background: var(--bg-panel);
+    /* ── Sentence Analysis ────────────────────────────────────── */
+    .sentence-high {
+        background: rgba(255,90,107,.06);
+        border-left: 3px solid var(--danger);
+        padding: 0.5rem 0.75rem;
+        margin: 0.35rem 0;
+        border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+        font-size: 0.82rem;
+        color: var(--text-primary);
+        transition: all var(--transition);
     }
-    .sentence-high { border-left-color: var(--danger); background: rgba(229, 72, 77, 0.03); }
-    .sentence-medium { border-left-color: var(--warning); background: rgba(245, 166, 35, 0.03); }
-    .sentence-low { border-left-color: var(--success); background: rgba(23, 184, 119, 0.03); }
+    .sentence-medium {
+        background: rgba(245,166,35,.06);
+        border-left: 3px solid var(--warning);
+        padding: 0.5rem 0.75rem;
+        margin: 0.35rem 0;
+        border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+        font-size: 0.82rem;
+        color: var(--text-primary);
+        transition: all var(--transition);
+    }
+    .sentence-low {
+        background: rgba(66,211,146,.06);
+        border-left: 3px solid var(--success);
+        padding: 0.5rem 0.75rem;
+        margin: 0.35rem 0;
+        border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+        font-size: 0.82rem;
+        color: var(--text-primary);
+        transition: all var(--transition);
+    }
 
-    /* ── Timeline Stepper ── */
-    .timeline-container {
-        display: flex;
-        flex-direction: column;
-        gap: 0;
-        padding: 0.25rem 0;
+    /* ── Progress Bars ────────────────────────────────────────── */
+    .ts-progress {
+        background: rgba(255,255,255,.04);
+        border-radius: 6px;
+        height: 6px;
+        overflow: hidden;
+        margin: 0.3rem 0;
     }
-    .timeline-step {
+    .ts-progress-bar {
+        height: 100%;
+        border-radius: 6px;
+        transition: width 1s cubic-bezier(.4,0,.2,1);
+    }
+    .ts-progress-gold .ts-progress-bar { background: linear-gradient(90deg, var(--accent), #D4B44E); }
+    .ts-progress-blue .ts-progress-bar { background: linear-gradient(90deg, var(--info), #7EC4FF); }
+    .ts-progress-green .ts-progress-bar { background: linear-gradient(90deg, var(--success), #6BE8B4); }
+    .ts-progress-red .ts-progress-bar { background: linear-gradient(90deg, var(--danger), #FF8A96); }
+
+    /* ── Intel Top Bar ────────────────────────────────────────── */
+    .top-intel-bar {
+        background: var(--bg-surface);
+        border-bottom: 1px solid var(--border);
+        padding: 0.6rem 1.5rem;
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 0.35rem 0;
+        justify-content: space-between;
+        gap: 1rem;
+        border-radius: var(--radius-lg);
+        margin-bottom: 1.25rem;
+        backdrop-filter: blur(12px);
     }
-    .timeline-icon {
-        width: 18px;
-        height: 18px;
+    .top-intel-bar .bar-left {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    .top-intel-bar .bar-right {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    .top-intel-bar .logo-text {
+        font-family: var(--font-heading);
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--accent);
+        letter-spacing: -0.01em;
+    }
+    .top-intel-bar .status-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--success);
+        display: inline-block;
+        animation: pulseGlow 2s ease-in-out infinite;
+    }
+    .top-intel-bar .status-text {
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        color: var(--text-muted);
+    }
+    .top-intel-bar .user-badge {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--accent), #D4B44E);
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 0.6rem;
-        border-radius: 50%;
-        flex-shrink: 0;
-        background: var(--bg-base);
-        border: 2px solid var(--success);
-        color: var(--success);
-    }
-    .timeline-step.active .timeline-icon {
-        border-color: var(--warning);
-        color: var(--warning);
-    }
-    .timeline-content {
-        min-width: 0;
-    }
-    .timeline-title {
-        font-size: 0.78rem;
-        font-weight: 600;
-        color: var(--text-primary);
-        line-height: 1.2;
-    }
-    .timeline-desc {
-        font-size: 0.68rem;
-        color: var(--text-muted);
-        line-height: 1.2;
+        font-family: var(--font-heading);
+        font-weight: 700;
+        font-size: 0.7rem;
+        color: #0A0B0E;
     }
 
-    /* ── Source Dossier Card ── */
+    /* ── Source Dossier Card ───────────────────────────────────── */
     .source-dossier-card {
-        background: var(--bg-panel);
-        border: 1px solid var(--border-glass);
-        border-radius: 8px;
-        padding: 1.25rem;
-        margin: 0.5rem 0;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 1.1rem;
     }
     .dossier-row {
         display: flex;
         justify-content: space-between;
-        align-items: center;
         padding: 0.4rem 0;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        border-bottom: 1px solid var(--border);
         font-size: 0.8rem;
     }
-    .dossier-row:last-of-type {
-        border-bottom: none;
+    .dossier-row:last-child { border-bottom: none; }
+    .dossier-label { color: var(--text-muted); font-family: var(--font-body); }
+    .dossier-value { color: var(--text-primary); font-family: var(--font-mono); font-weight: 500; }
+
+    /* ── Timeline ─────────────────────────────────────────────── */
+    .timeline-container { padding: 0.5rem 0; }
+    .timeline-step {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        padding: 0.5rem 0;
+        position: relative;
     }
-    .dossier-label {
-        color: var(--text-secondary);
-        font-family: var(--font-sans);
+    .timeline-step::before {
+        content: '';
+        position: absolute;
+        left: 13px;
+        top: 32px;
+        bottom: -8px;
+        width: 1px;
+        background: var(--border);
     }
-    .dossier-value {
+    .timeline-step:last-child::before { display: none; }
+    .timeline-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        flex-shrink: 0;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+    }
+    .timeline-icon.done {
+        background: var(--success-muted);
+        border-color: rgba(66,211,146,.3);
+        color: var(--success);
+    }
+    .timeline-icon.active {
+        background: var(--accent-muted);
+        border-color: var(--border-accent);
+        color: var(--accent);
+        animation: pulseGlow 2s ease-in-out infinite;
+    }
+    .timeline-content h4 {
+        font-family: var(--font-body) !important;
+        font-size: 0.82rem !important;
+        font-weight: 600 !important;
+        text-transform: none !important;
+        letter-spacing: normal !important;
+        color: var(--text-primary) !important;
+        margin: 0 !important;
+    }
+    .timeline-content p {
+        font-size: 0.72rem;
+        color: var(--text-muted);
+        margin: 0.15rem 0 0 !important;
+    }
+
+    /* ── Landing Hero ─────────────────────────────────────────── */
+    .landing-hero {
+        text-align: center;
+        padding: 3rem 1rem 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+    .landing-hero::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 600px;
+        height: 600px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(231,198,90,.06) 0%, transparent 70%);
+        pointer-events: none;
+        animation: heroGlow 6s ease-in-out infinite alternate;
+    }
+    .hero-shield {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        display: inline-block;
+        animation: floatShield 3s ease-in-out infinite;
+        filter: drop-shadow(0 0 20px rgba(231,198,90,.3));
+    }
+    .hero-header {
+        font-family: var(--font-heading);
+        font-size: 2.8rem;
+        font-weight: 700;
         color: var(--text-primary);
+        line-height: 1.15;
+        letter-spacing: -0.03em;
+        margin-bottom: 0.75rem;
+    }
+    .hero-header .accent { color: var(--accent); }
+    .hero-subtitle {
+        font-family: var(--font-body);
+        font-size: 1.05rem;
+        color: var(--text-secondary);
+        max-width: 520px;
+        margin: 0 auto 2rem;
+        line-height: 1.6;
+    }
+    .hero-divider {
+        width: 48px;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, var(--accent), transparent);
+        margin: 1.5rem auto;
+    }
+    .hero-metrics {
+        display: flex;
+        justify-content: center;
+        gap: 2rem;
+        margin: 2rem 0;
+        flex-wrap: wrap;
+    }
+    .hero-metric {
+        text-align: center;
+    }
+    .hero-metric-value {
         font-family: var(--font-mono);
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--accent);
+    }
+    .hero-metric-label {
+        font-family: var(--font-body);
+        font-size: 0.7rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-top: 0.2rem;
+    }
+    .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1.25rem;
+        max-width: 900px;
+        margin: 2.5rem auto 0;
+    }
+    .feature-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 1.5rem;
+        text-align: left;
+        transition: all var(--transition);
+        position: relative;
+        overflow: hidden;
+    }
+    .feature-card::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, rgba(255,255,255,.015) 0%, transparent 50%);
+        pointer-events: none;
+    }
+    .feature-card:hover {
+        border-color: var(--border-hover);
+        transform: translateY(-3px);
+        box-shadow: var(--shadow-lg);
+    }
+    .feature-icon {
+        font-size: 1.5rem;
+        margin-bottom: 0.75rem;
+    }
+    .feature-title {
+        font-family: var(--font-heading);
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 0.4rem;
+    }
+    .feature-desc {
+        font-size: 0.78rem;
+        color: var(--text-muted);
+        line-height: 1.55;
+    }
+
+    /* ── Auth Card ────────────────────────────────────────────── */
+    .auth-card {
+        max-width: 420px;
+        margin: 2rem auto;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-xl);
+        padding: 2.5rem 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+    .auth-card::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(231,198,90,.03) 0%, transparent 40%);
+        pointer-events: none;
+    }
+    .auth-progress {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-bottom: 1.5rem;
+    }
+    .auth-step {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--border);
+        transition: all var(--transition);
+    }
+    .auth-step.active {
+        background: var(--accent);
+        box-shadow: 0 0 8px rgba(231,198,90,.3);
+    }
+    .auth-step.done {
+        background: var(--success);
+    }
+
+    /* ── Info Boxes ───────────────────────────────────────────── */
+    .info-box {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 1rem 1.15rem;
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+        line-height: 1.6;
+    }
+    .info-box b { color: var(--text-primary); }
+
+    /* ── Education Cards ──────────────────────────────────────── */
+    .edu-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 1rem 1.15rem;
+        transition: all var(--transition);
+    }
+    .edu-card:hover {
+        border-color: var(--border-hover);
+        transform: translateY(-1px);
+    }
+    .edu-card b { color: var(--text-primary); font-size: 0.85rem; }
+    .edu-card p { color: var(--text-secondary); font-size: 0.78rem; margin-top: 0.3rem; }
+
+    /* ── User Profile Card ────────────────────────────────────── */
+    .user-profile-card {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 0.75rem 1rem;
+        margin-bottom: 0.75rem;
+    }
+    .user-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--font-heading);
+        font-weight: 700;
+        font-size: 0.8rem;
+        color: #0A0B0E;
+        flex-shrink: 0;
+    }
+    .user-name {
+        font-family: var(--font-body);
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: var(--text-primary);
+    }
+    .user-email {
+        font-family: var(--font-mono);
+        font-size: 0.68rem;
+        color: var(--text-muted);
+    }
+
+    /* ── Tabs (Vercel-style) ──────────────────────────────────── */
+    .stTabs [data-baseweb="tab-list"] {
+        background: transparent !important;
+        border-bottom: 1px solid var(--border) !important;
+        gap: 0 !important;
+        padding: 0 !important;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background: transparent !important;
+        color: var(--text-muted) !important;
+        font-family: var(--font-body) !important;
+        font-size: 0.82rem !important;
+        font-weight: 500 !important;
+        border: none !important;
+        border-bottom: 2px solid transparent !important;
+        padding: 0.65rem 1.1rem !important;
+        transition: all var(--transition) !important;
+        border-radius: 0 !important;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        color: var(--text-secondary) !important;
+    }
+    .stTabs [aria-selected="true"] {
+        color: var(--accent) !important;
+        border-bottom-color: var(--accent) !important;
+        background: transparent !important;
+    }
+    .stTabs [data-baseweb="tab-highlight"] {
+        background-color: var(--accent) !important;
+    }
+    .stTabs [data-baseweb="tab-panel"] {
+        padding: 1.25rem 0 0 !important;
+    }
+
+    /* ── Alerts ───────────────────────────────────────────────── */
+    .stAlert {
+        background: var(--bg-card) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: var(--radius-md) !important;
+        font-size: 0.82rem !important;
+    }
+
+    /* ── Expanders ────────────────────────────────────────────── */
+    [data-testid="stExpander"] {
+        background: var(--bg-card) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: var(--radius-md) !important;
+    }
+    [data-testid="stExpander"] summary span {
+        font-family: var(--font-body) !important;
+        font-size: 0.85rem !important;
+        color: var(--text-primary) !important;
+    }
+
+    /* ── Hidden Utility ───────────────────────────────────────── */
+    .hidden-btn-container {
+        visibility: hidden;
+        height: 0;
+        overflow: hidden;
+        position: absolute;
+    }
+
+    /* ── Badge Styles ─────────────────────────────────────────── */
+    .badge-suspicious {
+        background: var(--danger-muted);
+        color: var(--danger);
+        padding: 0.15rem 0.55rem;
+        border-radius: 4px;
+        font-family: var(--font-mono);
+        font-size: 0.68rem;
+        font-weight: 500;
+    }
+    .badge-credible {
+        background: var(--success-muted);
+        color: var(--success);
+        padding: 0.15rem 0.55rem;
+        border-radius: 4px;
+        font-family: var(--font-mono);
+        font-size: 0.68rem;
         font-weight: 500;
     }
 
-    /* ── Controls (Buttons, Inputs) ── */
-    .stButton > button {
-        background: #14181F !important;
-        color: var(--text-primary) !important;
-        border: 1px solid var(--border-glass) !important;
-        border-radius: 6px !important;
-        padding: 0.5rem 1rem !important;
-        font-family: var(--font-sans) !important;
-        font-weight: 500 !important;
-        font-size: 0.85rem !important;
-        transition: all 0.2s ease !important;
-    }
-    .stButton > button:hover {
-        background: #1C222B !important;
-        border-color: var(--border-glass-hover) !important;
-        color: #fff !important;
-    }
-    
-    .stButton > button[kind="primary"] {
-        background: var(--gold-premium) !important;
-        color: #000 !important;
-        border-color: var(--gold-premium) !important;
-        font-weight: 600 !important;
-    }
-    .stButton > button[kind="primary"]:hover {
-        background: #F0CF73 !important;
-    }
-
-    .stTextInput input, .stTextArea textarea {
-        background: var(--bg-base) !important;
-        border: 1px solid var(--border-glass) !important;
-        border-radius: 6px !important;
-        color: var(--text-primary) !important;
-        padding: 0.75rem 1rem !important;
-        font-size: 0.9rem !important;
-        transition: border-color 0.2s;
-    }
-    .stTextInput input:focus, .stTextArea textarea:focus {
-        border-color: var(--gold-premium) !important;
-        box-shadow: 0 0 0 1px var(--gold-muted) !important;
-    }
-
-    /* ── Badges ── */
-    .badge-suspicious, .badge-credible {
-        padding: 0.15rem 0.5rem !important;
-        border-radius: 4px !important;
-        font-size: 0.7rem !important;
-        font-family: var(--font-mono) !important;
-        display: inline-flex !important;
-        align-items: center !important;
-        border: 1px solid transparent !important;
-    }
-    .badge-suspicious { background: rgba(229, 72, 77, 0.1) !important; color: var(--danger) !important; border-color: rgba(229, 72, 77, 0.2) !important; }
-    .badge-credible { background: rgba(23, 184, 119, 0.1) !important; color: var(--success) !important; border-color: rgba(23, 184, 119, 0.2) !important; }
-
-    /* ── User Profile Card ── */
-    .user-profile-card {
-        background: transparent;
-        border: 1px solid var(--border-glass);
-        border-radius: 6px;
-        padding: 0.75rem;
-        margin-bottom: 1rem;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-    }
-    .user-avatar {
-        width: 32px; height: 32px;
-        border-radius: 4px;
-        display: flex; align-items: center; justify-content: center;
-        font-weight: 600; font-size: 0.8rem;
-        font-family: var(--font-mono);
-        color: var(--bg-base);
-    }
-    .user-info { flex-grow: 1; min-width: 0; line-height: 1.3; }
-    .user-display-name {
-        font-size: 0.85rem; font-weight: 500; color: var(--text-primary);
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .user-email-sub {
-        font-size: 0.7rem; color: var(--text-secondary); font-family: var(--font-mono);
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .user-status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
-
-    /* ── Tabs (Vercel-style underline tabs) ── */
-    .stTabs [data-baseweb="tab-list"] {
-        background: transparent;
-        gap: 1.5rem;
-        border-bottom: 1px solid var(--border-glass);
-        padding-bottom: 0;
-    }
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 0 !important;
-        font-family: var(--font-sans) !important;
-        font-weight: 400 !important;
-        font-size: 0.9rem !important;
-        color: var(--text-secondary) !important;
-        padding: 0.5rem 0 !important;
-        margin: 0 !important;
-        border: none !important;
-        border-bottom: 2px solid transparent !important;
-        background: transparent !important;
-    }
-    .stTabs [data-baseweb="tab"]:hover {
-        color: var(--text-primary) !important;
-    }
-    .stTabs [aria-selected="true"] {
-        color: var(--text-primary) !important;
-        border-bottom-color: var(--gold-premium) !important;
-        font-weight: 500 !important;
-    }
-
-    /* ── Info Box & Education Cards ── */
-    .info-box {
-        background: var(--bg-panel) !important;
-        border: 1px solid var(--border-glass) !important;
-        border-radius: 6px;
-        padding: 0.8rem 1rem;
-        color: var(--text-secondary);
-        font-size: 0.85rem;
-        line-height: 1.5;
-    }
-    .info-box b { color: var(--text-primary) !important; }
-    .edu-card {
-        background: transparent !important;
-        border: 1px solid var(--border-glass) !important;
-        border-radius: 6px;
+    /* ── Right Intel Panel ────────────────────────────────────── */
+    .right-intel-panel {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
         padding: 1rem;
-        margin: 0.5rem 0;
-        display: flex;
-        align-items: flex-start;
-        gap: 12px;
-        transition: border-color 0.2s;
     }
-    .edu-card:hover { border-color: var(--border-glass-hover) !important; }
-    .edu-icon { font-size: 1.2rem; opacity: 0.8; }
-    .edu-body { flex-grow: 1; }
-    .edu-title { font-weight: 500; color: var(--text-primary) !important; font-size: 0.9rem; margin-bottom: 0.2rem; }
-    .edu-desc { font-size: 0.8rem; color: var(--text-secondary) !important; line-height: 1.4; }
+    .border-verified { border-left: 3px solid var(--success); }
+    .border-uncertain { border-left: 3px solid var(--warning); }
+    .border-danger { border-left: 3px solid var(--danger); }
 
-    /* ── Hidden Button Container (login page resend) ── */
-    .hidden-btn-container {
-        display: none !important;
-    }
-
-    /* ── Alerts ── */
-    .stAlert {
-        background: var(--bg-panel) !important;
-        border: 1px solid var(--border-glass) !important;
-        border-radius: 6px !important;
-        box-shadow: none !important;
-    }
-
-    /* ── Forms ── */
-    [data-baseweb="select"] > div {
-        background: var(--bg-base) !important;
-        border: 1px solid var(--border-glass) !important;
-        border-radius: 6px !important;
-    }
-    .stRadio > div { gap: 0.5rem; }
-    .stRadio label { font-size: 0.9rem !important; }
-    [data-testid="stTextInput"] [data-testid="textInputInstructions"] { display: none !important; }
-    div[data-baseweb="input"] ~ div { display: none !important; }
-
-    /* ── Footer ── */
+    /* ── Footer ───────────────────────────────────────────────── */
     .footer {
         text-align: center;
+        padding: 2rem 0 1rem;
         color: var(--text-muted);
-        font-family: var(--font-mono);
-        font-size: 0.7rem;
-        padding: 2rem 0;
-        margin-top: 2rem;
-        border-top: 1px solid var(--border-glass);
+        font-size: 0.72rem;
+        font-family: var(--font-body);
     }
-    .footer p { color: var(--text-muted) !important; }
+    .footer a { color: var(--accent); text-decoration: none; }
 
-    /* ── Mobile ── */
-    @media (max-width: 768px) {
-        [data-testid="block-container"] {
-            padding-left: 2% !important;
-            padding-right: 2% !important;
-            max-width: 98% !important;
-        }
-        .metric-card { padding: 0.6rem !important; }
-        .metric-value { font-size: 1.2rem !important; }
+    /* ── Forms ────────────────────────────────────────────────── */
+    .stForm {
+        border: 1px solid var(--border) !important;
+        background: var(--bg-card) !important;
+        border-radius: var(--radius-lg) !important;
+        padding: 1rem !important;
     }
+
+    /* ── Scrollbar ────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+        background: rgba(255,255,255,.08);
+        border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.14); }
+
+    /* ── Animations ───────────────────────────────────────────── */
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(16px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes scaleIn {
+        from { opacity: 0; transform: scale(0.95); }
+        to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+    }
+    @keyframes pulseGlow {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    @keyframes heroGlow {
+        0% { opacity: 0.4; transform: translateX(-50%) scale(1); }
+        100% { opacity: 0.7; transform: translateX(-50%) scale(1.15); }
+    }
+    @keyframes floatShield {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-8px); }
+    }
+    @keyframes countUp {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Responsive ───────────────────────────────────────────── */
+    @media (max-width: 768px) {
+        .block-container { padding: 1rem !important; }
+        .hero-header { font-size: 1.8rem; }
+        .hero-subtitle { font-size: 0.9rem; }
+        .feature-grid { grid-template-columns: 1fr; }
+        .hero-metrics { gap: 1rem; }
+        .auth-card { margin: 1rem; padding: 1.5rem; }
+        .top-intel-bar { flex-wrap: wrap; padding: 0.5rem 1rem; }
+        .metric-card { padding: 0.75rem !important; }
+        .metric-value { font-size: 1.2rem !important; }
+        h1 { font-size: 1.5rem !important; }
+    }
+
 </style>
 
 """, unsafe_allow_html=True)
@@ -811,9 +1094,9 @@ def create_knowledge_graph(results):
         
         # Color by verdict
         if verdict in ("TRUE", "VERIFIED"):
-            c_color = "#10B981"
+            c_color = "#42D392"
         elif verdict in ("FALSE", "CONTRADICTED"):
-            c_color = "#EF4444"
+            c_color = "#FF5A6B"
         else:
             c_color = "#F59E0B"
             
@@ -926,7 +1209,7 @@ def create_knowledge_graph(results):
             y=1.02,
             xanchor="right",
             x=1,
-            font=dict(size=9, color="#94A3B8"),
+            font=dict(size=9, color="#9EA3B5"),
             bgcolor="rgba(0,0,0,0)"
         ),
         hovermode='closest',
@@ -1020,8 +1303,8 @@ def create_waterfall_chart(results):
         text = [f"{v:+.1f}%" if m == "relative" else f"{v:.1f}%" for v, m in zip(y_vals, measures)],
         textposition = "outside",
         connector = {"line":{"color":"#475569", "width": 1.0}},
-        decreasing = {"marker":{"color":"#EF4444"}},
-        increasing = {"marker":{"color":"#10B981"}},
+        decreasing = {"marker":{"color":"#FF5A6B"}},
+        increasing = {"marker":{"color":"#42D392"}},
         totals = {"marker":{"color":"#3B82F6"}}
     ))
     
@@ -1030,9 +1313,9 @@ def create_waterfall_chart(results):
         plot_bgcolor='rgba(0,0,0,0)',
         height=320,
         margin=dict(l=10, r=10, t=10, b=10),
-        font=dict(color="#E2E8F0", family="monospace", size=9),
-        xaxis=dict(gridcolor='rgba(255,255,255,0.02)'),
-        yaxis=dict(gridcolor='rgba(255,255,255,0.02)', range=[0, 105])
+        font=dict(color="#F3F4F8", family="'JetBrains Mono', monospace", size=9),
+        xaxis=dict(gridcolor='rgba(255,255,255,0.04)'),
+        yaxis=dict(gridcolor='rgba(255,255,255,0.04)', range=[0, 105])
     )
     return fig
 
@@ -1087,7 +1370,7 @@ def render_source_dossier(results):
     
     st.markdown(f"""
     <div class="source-dossier-card">
-        <div style="font-family: var(--font-mono); font-size: 0.85rem; font-weight: 700; color: var(--accent-secondary); margin-bottom: 0.5rem;">
+        <div style="font-family: var(--font-mono); font-size: 0.85rem; font-weight: 700; color: var(--info); margin-bottom: 0.5rem;">
             DOSSIER // {domain.upper()}
         </div>
         <div class="dossier-row">
@@ -1124,21 +1407,21 @@ def render_source_dossier(results):
 def create_gauge_chart(score, title="Credibility Score"):
     """Create a gauge chart with enterprise dark charcoal + gold/cyan palette."""
     if score >= 0.65:
-        bar_color = "#10B981"
+        bar_color = "#42D392"
     elif score >= 0.50:
         bar_color = "#F59E0B"
     else:
-        bar_color = "#EF4444"
+        bar_color = "#FF5A6B"
 
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
         value=score * 100,
         domain={'x': [0, 1], 'y': [0, 1]},
-        title={'text': title, 'font': {'size': 16, 'color': '#E2E8F0', 'family': 'Space Grotesk'}},
-        number={'suffix': '%', 'font': {'size': 42, 'color': bar_color, 'family': 'Space Grotesk', 'weight': 'bold'}},
+        title={'text': title, 'font': {'size': 16, 'color': '#F3F4F8', 'family': 'Space Grotesk'}},
+        number={'suffix': '%', 'font': {'size': 42, 'color': bar_color, 'family': 'JetBrains Mono', 'weight': 'bold'}},
         gauge={
-            'axis': {'range': [0, 100], 'tickwidth': 1.5, 'tickcolor': '#475569',
-                     'tickfont': {'color': '#94A3B8', 'family': 'Inter'}},
+            'axis': {'range': [0, 100], 'tickwidth': 1.5, 'tickcolor': '#666C7A',
+                     'tickfont': {'color': '#9EA3B5', 'family': 'Inter'}},
             'bar': {'color': bar_color, 'thickness': 0.3},
             'bgcolor': 'rgba(15, 19, 25, 0.45)',
             'borderwidth': 1,
@@ -2428,11 +2711,11 @@ def send_otp_email(to_email, otp):
         
         body = f"""
         <html>
-        <body style="font-family: sans-serif; background-color: #0B0F14; color: #E2E8F0; padding: 20px;">
+        <body style="font-family: sans-serif; background-color: #090A0D; color: #E2E8F0; padding: 20px;">
             <div style="max-width: 500px; margin: 0 auto; background-color: #151B23; border: 1px solid #F59E0B; border-radius: 12px; padding: 30px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
                 <h2 style="color: #F59E0B; margin-top: 0;">Fake News Detector Authentication</h2>
-                <p style="color: #94A3B8; font-size: 16px;">Please use the following One-Time Password (OTP) to sign in to your credibility dashboard:</p>
-                <div style="font-size: 32px; font-weight: bold; color: #F59E0B; background-color: #0B0F14; padding: 15px; border-radius: 8px; margin: 25px 0; letter-spacing: 5px;">
+                <p style="color: var(--text-secondary); font-size: 16px;">Please use the following One-Time Password (OTP) to sign in to your credibility dashboard:</p>
+                <div style="font-size: 32px; font-weight: bold; color: #F59E0B; background-color: #090A0D; padding: 15px; border-radius: 8px; margin: 25px 0; letter-spacing: 5px;">
                     {otp}
                 </div>
                 <p style="color: #475569; font-size: 13px;">This OTP is valid for 10 minutes. If you did not request this, please ignore this email.</p>
@@ -2514,117 +2797,162 @@ def load_live_metrics():
 
 
 def render_landing():
-    """Render the marketing landing/homescreen page."""
+    """Render the premium intelligence platform landing page."""
     live_metrics = load_live_metrics()
-    
+
+    # ── Immersive Hero Section ──
     st.markdown("""
     <div class="landing-hero">
-        <h1>🛡️ TruthShield Portal</h1>
-        <p>Advanced Credibility Analyzer & Media Literacy Engine</p>
+        <div class="hero-shield">\U0001f6e1\ufe0f</div>
+        <div class="hero-header">Intelligence-Grade<br><span class="accent">Credibility Analysis</span></div>
         <div class="hero-divider"></div>
-        <p style="font-size: 1.1rem; color: #94A3B8; margin-top: 1rem; max-width: 700px; margin-left: auto; margin-right: auto;">
-            Empowering citizens to verify facts, decode propaganda patterns, and challenge disinformation networks using high-performance NLP machine learning pipelines.
+        <p class="hero-subtitle">
+            Military-precision AI that decodes propaganda patterns, verifies source credibility,
+            and delivers explainable intelligence reports in seconds.
         </p>
     </div>
     """, unsafe_allow_html=True)
 
-    # CTA Button
-    col_btn1, col_btn2, col_btn3 = st.columns([1, 1.2, 1])
+    # ── CTA Button ──
+    col_btn1, col_btn2, col_btn3 = st.columns([1.2, 1, 1.2])
     with col_btn2:
-        if st.button("🚀 Enter Credibility Console", width='stretch', key="cta_enter_portal"):
+        if st.button("Launch Intelligence Workspace", type="primary", key="cta_enter_portal", use_container_width=True):
             st.session_state.page = "login"
             st.rerun()
 
-    st.markdown("<br><br>", unsafe_allow_html=True)
-
-    # Features grid in Streamlit columns
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        with st.container(border=True):
-            st.markdown("""
-            <div style="text-align: center; padding: 1rem 0;">
-                <span style="font-size: 3rem;">🧠</span>
-                <h4 style="margin-top: 1rem;">Natural Language Processing</h4>
-                <p style="font-size: 0.9rem; color: var(--text-secondary);">
-                    Classifies text syntax patterns, vocabulary density, and clickbait phrases using a custom TF-IDF Ensemble model.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-    with col2:
-        with st.container(border=True):
-            st.markdown("""
-            <div style="text-align: center; padding: 1rem 0;">
-                <span style="font-size: 3rem;">🌐</span>
-                <h4 style="margin-top: 1rem;">Real-Time Article Scraper</h4>
-                <p style="font-size: 0.9rem; color: var(--text-secondary);">
-                    Extracts metadata and body copy from online news articles dynamically using an automated newspaper parsing wrapper.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-
-    with col3:
-        with st.container(border=True):
-            st.markdown("""
-            <div style="text-align: center; padding: 1rem 0;">
-                <span style="font-size: 3rem;">📖</span>
-                <h4 style="margin-top: 1rem;">Media Literacy Gaming</h4>
-                <p style="font-size: 0.9rem; color: var(--text-secondary);">
-                    Equips readers with the SIFT fact-checking method, interactive bias checklists, and intuition tests for false headlines.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+    # ── Live Metrics Strip ──
+    st.markdown(f"""
+    <div class="hero-metrics">
+        <div class="hero-metric">
+            <div class="hero-metric-value">{live_metrics['total_articles_str']}</div>
+            <div class="hero-metric-label">Articles Analyzed</div>
+        </div>
+        <div class="hero-metric">
+            <div class="hero-metric-value">{live_metrics['accuracy_str']}</div>
+            <div class="hero-metric-label">Model Accuracy</div>
+        </div>
+        <div class="hero-metric">
+            <div class="hero-metric-value">42+</div>
+            <div class="hero-metric-label">Intelligence Sources</div>
+        </div>
+        <div class="hero-metric">
+            <div class="hero-metric-value">24/7</div>
+            <div class="hero-metric-label">Monitoring Active</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Statistics Board
-    st.markdown("### 📊 Project Insights & Metrics")
-    m1, m2, m3 = st.columns(3)
-    with m1:
-        st.markdown(f"""<div class="metric-card">
-            <div class="metric-value">{live_metrics['total_articles_str']}</div>
-            <div class="metric-label">Articles in Model Corpus</div>
-        </div>""", unsafe_allow_html=True)
-    with m2:
-        st.markdown(f"""<div class="metric-card">
-            <div class="metric-value">{live_metrics['accuracy_str']}</div>
-            <div class="metric-label">Prediction Accuracy</div>
-        </div>""", unsafe_allow_html=True)
-    with m3:
-        st.markdown("""<div class="metric-card">
-            <div class="metric-value">Real-Time</div>
-            <div class="metric-label">Data Streams</div>
-        </div>""", unsafe_allow_html=True)
+    # ── Feature Cards ──
+    st.markdown("""
+    <div class="feature-grid">
+        <div class="feature-card">
+            <div class="feature-icon">\U0001f9e0</div>
+            <div class="feature-title">Neural Intelligence</div>
+            <div class="feature-desc">
+                Multi-model ensemble combining TF-IDF classifiers, DistilBERT transformers,
+                and NLP heuristics for deep linguistic credibility assessment.
+            </div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">\U0001f50d</div>
+            <div class="feature-title">Source Intelligence</div>
+            <div class="feature-desc">
+                Domain reputation analysis, political bias detection, fact-check cross-referencing,
+                and real-time source credibility scoring across global databases.
+            </div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">\u26a1</div>
+            <div class="feature-title">Real-Time Verification</div>
+            <div class="feature-desc">
+                Automated claim extraction, Google Fact Check API integration, temporal analysis,
+                and evidence-based reasoning delivered in under 10 seconds.
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # Footer
-    st.markdown(f"""
+    st.markdown("<br><br>", unsafe_allow_html=True)
+
+    # ── How It Works Timeline ──
+    st.markdown("#### How TruthShield Works")
+    st.markdown("""
+    <div class="timeline-container" style="max-width: 600px; margin: 1rem auto;">
+        <div class="timeline-step">
+            <div class="timeline-icon done">1</div>
+            <div class="timeline-content">
+                <h4>Ingest & Analyze</h4>
+                <p>Submit text or URL. Our scraper extracts content, metadata, and source information automatically.</p>
+            </div>
+        </div>
+        <div class="timeline-step">
+            <div class="timeline-icon done">2</div>
+            <div class="timeline-content">
+                <h4>Cross-Verify</h4>
+                <p>Claims are extracted and verified against fact-check databases, source reputation indices, and historical patterns.</p>
+            </div>
+        </div>
+        <div class="timeline-step">
+            <div class="timeline-icon done">3</div>
+            <div class="timeline-content">
+                <h4>AI Reasoning</h4>
+                <p>Multiple ML models analyze linguistic patterns, bias signals, clickbait markers, and propaganda indicators.</p>
+            </div>
+        </div>
+        <div class="timeline-step">
+            <div class="timeline-icon done">4</div>
+            <div class="timeline-content">
+                <h4>Intelligence Report</h4>
+                <p>Receive a comprehensive credibility assessment with explainable evidence, confidence scores, and actionable insights.</p>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Trust Badges Footer ──
+    st.markdown("""
     <div class="footer">
-        <p>Fake News Detector v2.0 — Built with Streamlit, scikit-learn & NLP</p>
-        <p>This tool is for educational purposes. Always verify information with trusted sources.</p>
+        <p style="margin-bottom: 0.5rem; letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.65rem;">
+            Enterprise Grade \u00b7 Open Source \u00b7 Research Backed \u00b7 AI Powered
+        </p>
+        <p>TruthShield Intelligence Platform v3.0 \u2014 Built for analysts, journalists, and researchers.</p>
+        <p>This tool is for educational and research purposes. Always verify information with trusted sources.</p>
     </div>
     """, unsafe_allow_html=True)
 
 
+
 def render_login():
     """Render the Gmail OTP login page."""
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    
-    col_l1, col_l2, col_l3 = st.columns([1, 1.5, 1])
-    
+
+    col_l1, col_l2, col_l3 = st.columns([1, 1.2, 1])
+
     with col_l2:
-        with st.container(border=True):
-            st.markdown(f"""
-            <div style="text-align: center; margin-bottom: 1.5rem;">
-                <img src="{logo_base64}" style="width: 75px; height: 75px; border-radius: 50%; border: 2px solid var(--brass); margin-bottom: 0.8rem; background: rgba(18, 15, 14, 0.8);">
-                <h3 style="margin: 0; color: var(--accent);">Sign In to Console</h3>
-                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.2rem;">Verify your Gmail using One-Time Password</p>
+        # ── Auth Progress Dots ──
+        otp_phase = st.session_state.get("otp_sent", False)
+        st.markdown(f"""
+        <div class="auth-card">
+            <div class="auth-progress">
+                <div class="auth-step {'done' if otp_phase else 'active'}"></div>
+                <div class="auth-step {'active' if otp_phase else ''}"></div>
+                <div class="auth-step"></div>
             </div>
-            """, unsafe_allow_html=True)
+            <div style="text-align: center; margin-bottom: 1.5rem;">
+                <div style="font-size: 2.5rem; margin-bottom: 0.75rem; filter: drop-shadow(0 0 12px rgba(231,198,90,.3));">🛡️</div>
+                <h2 style="margin: 0 0 0.25rem; font-size: 1.4rem;">Welcome Back</h2>
+                <p style="color: var(--text-muted); font-size: 0.82rem; margin: 0;">Sign in to your intelligence workspace</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        with st.container(border=False):
             last_email = get_last_user()
             email_input = st.text_input("Enter your Gmail Address:", value=last_email, placeholder="name@gmail.com", key="login_email", on_change=lambda: None)
             
             if not st.session_state.otp_sent:
-                if st.button("Send Verification Code", width='stretch', type="primary", key="send_otp_btn"):
+                if st.button("Send Verification Code →", type="primary", key="send_otp_btn", use_container_width=True):
                     if email_input and re.match(r"[^@]+@[^@]+\.[^@]+", email_input.strip()):
                         otp = str(random.randint(100000, 999999))
                         st.session_state.otp_code = otp
@@ -2663,7 +2991,7 @@ def render_login():
                 
                 col_btn_verify, col_btn_resend = st.columns(2)
                 with col_btn_verify:
-                    if st.button("Verify & Sign In", width='stretch', type="primary", key="verify_otp_btn"):
+                    if st.button("Verify & Sign In →", type="primary", key="verify_otp_btn", use_container_width=True):
                         if otp_input.strip() == st.session_state.otp_code:
                             st.session_state.logged_in = True
                             st.session_state.page = "dashboard"
@@ -2673,7 +3001,7 @@ def render_login():
                         else:
                             st.error("❌ Incorrect verification code. Please try again.")
                 with col_btn_resend:
-                    if st.button("Change Email", width='stretch', key="change_email_btn"):
+                    if st.button("Change Email", key="change_email_btn", use_container_width=True):
                         st.session_state.otp_sent = False
                         st.session_state.otp_code = None
                         st.session_state.login_message = None
@@ -2699,7 +3027,7 @@ def render_login():
                 """, unsafe_allow_html=True)
                 
                 st.markdown('<div class="hidden-btn-container">', unsafe_allow_html=True)
-                if st.button("Resend OTP", key="resend_otp_trigger_btn", width='content'):
+                if st.button("Resend OTP", key="resend_otp_trigger_btn", ):
                     otp = str(random.randint(100000, 999999))
                     st.session_state.otp_code = otp
                     st.session_state.otp_sent_time = time.time()
@@ -2726,8 +3054,8 @@ def render_login():
                 .resend-btn {{
                     width: 100%;
                     box-sizing: border-box;
-                    background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
-                    color: #0B0F14;
+                    background: linear-gradient(135deg, #E7C65A 0%, #D4B44E 100%);
+                    color: #0A0B0E;
                     border: none;
                     border-radius: 10px;
                     padding: 0.75rem 2rem;
@@ -2738,7 +3066,7 @@ def render_login():
                     text-align: center;
                     cursor: pointer;
                     transition: all 0.2s ease;
-                    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2);
+                    box-shadow: 0 2px 8px rgba(231, 198, 90, 0.2);
                     user-select: none;
                     display: flex;
                     justify-content: center;
@@ -2826,7 +3154,7 @@ def render_login():
                 """)
             st.markdown("<hr style='border-color: rgba(255,255,255,0.05);'>", unsafe_allow_html=True)
             
-            if st.button("⬅ Back to Homepage", width='stretch', key="back_to_home_btn"):
+            if st.button("← Back to Homepage", key="back_to_home_btn", use_container_width=True):
                 st.session_state.page = "landing"
                 st.session_state.otp_sent = False
                 st.session_state.otp_code = None
@@ -2850,9 +3178,9 @@ def render_feedback_page():
     
     # Title
     st.markdown("""
-    <div class="landing-hero">
-        <h1>💬 AI Credibility Feedback</h1>
-        <p>Your inputs help calibrate and train our detection models</p>
+    <div style="text-align: center; padding: 1.5rem 0 1rem;">
+        <h2>💬 AI Credibility Feedback</h2>
+        <p style="color: var(--text-muted); font-size: 0.85rem;">Your inputs help calibrate and improve our detection models</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -2860,7 +3188,7 @@ def render_feedback_page():
     analysis_results = st.session_state.get("analysis_results")
     if not analysis_results:
         st.warning("⚠️ No article analysis found. Please run an analysis first on the dashboard.")
-        if st.button("← Go to Dashboard", width='content'):
+        if st.button("← Go to Dashboard"):
             st.session_state.page = "dashboard"
             st.rerun()
         return
@@ -2881,13 +3209,13 @@ def render_feedback_page():
     # Navigation buttons: Back + Skip
     col_nav_back, col_nav_skip = st.columns([1, 1])
     with col_nav_back:
-        if st.button("← Back to Results", key="feedback_back_top", width='stretch'):
+        if st.button("← Back to Results", key="feedback_back_top", use_container_width=True):
             st.session_state.pending_feedback = False
             st.session_state.page = "dashboard"
             st.rerun()
     with col_nav_skip:
         if is_auto_redirect:
-            if st.button("⏭️ Skip Feedback", key="feedback_skip_btn", width='stretch'):
+            if st.button("⏭️ Skip Feedback", key="feedback_skip_btn", use_container_width=True):
                 st.session_state.pending_feedback = False
                 st.session_state.page = "dashboard"
                 st.rerun()
@@ -2913,7 +3241,7 @@ def render_feedback_page():
             rating = st.slider("Rate accuracy (1 = poor, 5 = perfect):", 1, 5, 4, key="fb_page_rating")
             feedback_notes = st.text_area("Optional notes / corrections:", placeholder="What did the model get right or wrong? Are there specific facts that need correction?", key="fb_page_notes")
             
-            if st.button("Submit Feedback", key="fb_page_submit", type="primary", width='content'):
+            if st.button("Submit Feedback", key="fb_page_submit", type="primary", ):
                 email = st.session_state.get("email", "anonymous")
                 save_feedback(
                     email,
@@ -2964,7 +3292,7 @@ def render_feedback_page():
             """)
             
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("← Go to Dashboard", key="feedback_back_bottom", width='stretch'):
+            if st.button("← Go to Dashboard", key="feedback_back_bottom", use_container_width=True):
                 st.session_state.pending_feedback = False
                 st.session_state.page = "dashboard"
                 st.rerun()
@@ -3004,18 +3332,17 @@ def render_dashboard():
         grad_start, grad_end = get_avatar_gradient(user_email)
         
         st.markdown(f"""
-        <div class="user-profile-card" style="--profile-gradient: linear-gradient(90deg, {grad_start}, {grad_end});">
+        <div class="user-profile-card">
             <div class="user-avatar" style="background: linear-gradient(135deg, {grad_start}, {grad_end});">
                 {initials}
             </div>
-            <div class="user-info">
-                <div class="user-display-name">{display_name}</div>
-                <div class="user-email-sub">{user_email}</div>
+            <div>
+                <div class="user-name">{display_name}</div>
+                <div class="user-email">{user_email}</div>
             </div>
-            <div class="user-status-dot" title="Online"></div>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("🚪 Log Out", width='stretch', key="sidebar_logout_btn"):
+        if st.button("Log Out", key="sidebar_logout_btn", use_container_width=True):
             st.session_state.logged_in = False
             st.session_state.email = ""
             st.session_state.page = "landing"
@@ -3054,7 +3381,7 @@ def render_dashboard():
                         st.button(
                             btn_label,
                             key=f"india_feed_{idx}_{feed_category[:5]}",
-                            width='stretch',
+                            use_container_width=True,
                             on_click=load_article_callback,
                             args=(description,)
                         )
@@ -3070,7 +3397,7 @@ def render_dashboard():
                     ("Breaking: Miracle Cure Found in Ancient Indian Herb", "A viral WhatsApp forward claims that a rare Himalayan herb can cure all diseases within 48 hours. Medical experts have debunked this claim stating there is no scientific evidence supporting these miraculous healing properties.")
                 ]
                 for title, body in news_items:
-                    st.button(title, key=f"feed_btn_{title[:10]}", width='stretch', on_click=load_article_callback, args=(body,))
+                    st.button(title, key=f"feed_btn_{title[:10]}", use_container_width=True, on_click=load_article_callback, args=(body,))
         live_metrics = load_live_metrics()
         st.markdown("---")
         st.markdown("### Model & Dataset")
@@ -3102,8 +3429,8 @@ def render_dashboard():
         """)
         st.markdown("---")
         st.markdown("""
-        <div style="color:#94A3B8;font-size:0.78rem;text-align:center;">
-            Built with Streamlit, scikit-learn & Newspaper3k
+        <div class="footer" style="padding: 0.5rem 0;">
+            TruthShield Intelligence Platform v3.0
         </div>
         """, unsafe_allow_html=True)
 
@@ -3111,28 +3438,20 @@ def render_dashboard():
 
     # ── Top Intelligence Bar ──
     display_name = email_to_display_name(st.session_state.email)
+    initials_top = get_user_initials(display_name)
     st.markdown(f"""
     <div class="top-intel-bar">
-        <div class="intel-logo-section">
-            <span class="intel-logo">🛡️</span>
-            <span class="intel-title">TRUTHSHIELD</span>
-            <span class="intel-subtitle">INTELLIGENCE_WORKSPACE</span>
+        <div class="bar-left">
+            <span style="font-size: 1.2rem;">🛡️</span>
+            <span class="logo-text">TruthShield</span>
+            <span style="color: var(--text-muted); font-family: var(--font-mono); font-size: 0.68rem;">WORKSPACE</span>
         </div>
-        <div class="intel-status-section">
-            <div class="status-item">
-                <span class="status-dot green"></span>
-                <span class="status-label">SYSTEM STATE: ACTIVE</span>
-            </div>
-            <div class="status-item">
-                <span class="status-label">CORPUS CAPACITY: 120,400+</span>
-            </div>
-            <div class="status-item">
-                <span class="status-label">MODEL VER: ENS_V3.5_SECURE</span>
-            </div>
-        </div>
-        <div class="intel-user-section">
-            <span class="user-email">{display_name.upper()}</span>
-            <span class="user-badge">ANALYST</span>
+        <div class="bar-right">
+            <span class="status-dot"></span>
+            <span class="status-text">All Systems Operational</span>
+            <span style="color: var(--text-muted); font-size: 0.68rem;">|</span>
+            <span class="status-text">{display_name}</span>
+            <div class="user-badge">{initials_top}</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -3187,7 +3506,7 @@ def render_dashboard():
 
         col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
         with col_btn2:
-            predict_clicked = st.button("Analyze Credibility", width='stretch', type="primary")
+            predict_clicked = st.button("Analyze Credibility", use_container_width=True, type="primary")
 
         if predict_clicked and article_text and len(article_text.strip()) > 50:
             with st.spinner("🌐 Detecting language & translating..."):
@@ -3199,17 +3518,17 @@ def render_dashboard():
                 else:
                     analysis_text = article_text
                     
-            with st.status("🔍 Initiating Intelligence Scan...", expanded=True) as status:
-                st.write("✓ Language validation completed.")
+            with st.status("⚡ Initiating Intelligence Pipeline...", expanded=True) as status:
+                st.write("▸ Language validation completed")
                 time.sleep(0.2)
-                st.write("✓ Querying engine pipeline & indicators...")
+                st.write("▸ Loading NLP engine & classifier ensemble...")
                 clickbait_detector = get_clickbait_detector()
                 ai_detector = get_ai_detector()
                 claim_verifier = get_claim_verifier()
                 source_engine = get_source_engine()
                 time.sleep(0.2)
                 
-                st.write("✓ Running machine learning classifier ensemble...")
+                st.write("▸ Running multi-model credibility assessment...")
                 results = predict_article(
                     analysis_text, model, preprocessor,
                     clickbait_detector=clickbait_detector,
@@ -3224,24 +3543,24 @@ def render_dashboard():
                 evidence_count = results.get("evidence_count", 0)
                 domain = results.get("source_profile", {}).get("domain") or "(no URL)"
                 
-                st.write(f"✓ Claims isolated ({claims_count} verifications initiated).")
+                st.write(f"▸ {claims_count} claims extracted — cross-referencing knowledge bases...")
                 time.sleep(0.2)
-                st.write(f"✓ Checked external KBs & fact-check APIs (found {evidence_count} matches).")
+                st.write(f"▸ Fact-check API returned {evidence_count} matches")
                 time.sleep(0.2)
                 if domain != "(no URL)":
-                    st.write(f"✓ Checked reputation database for source domain: {domain}.")
+                    st.write(f"▸ Source reputation scan: {domain}")
                     time.sleep(0.2)
-                st.write("✓ Extracting entities and generating summary...")
+                st.write("▸ Extracting named entities & generating intelligence summary...")
                 sentiment_data = nlp_engine.get_sentiment_metrics(analysis_text)
                 entities_data = nlp_engine.extract_entities(analysis_text)
                 summary_data = nlp_engine.generate_summary(analysis_text)
                 time.sleep(0.2)
                 
-                st.write("✓ Running SHAP explainability analysis...")
+                st.write("▸ Running SHAP explainability analysis...")
                 shap_data = nlp_engine.explain_with_shap(analysis_text, model)
                 domain_profile = results.get('source_profile')
                 
-                status.update(label="✓ Investigation Completed", state="complete", expanded=False)
+                status.update(label="✓ Intelligence Report Generated", state="complete", expanded=False)
 
             # Save check to database history
             words_list = article_text.strip().split()
@@ -3316,7 +3635,7 @@ def render_dashboard():
                             <span>Redirecting to <b>Accuracy Calibration (Feedback)</b> in <span id="ts-timer" style="color: #E5C158; font-weight: bold; font-family: monospace; font-size: 1.1rem;">{remaining}</span> seconds...</span>
                         </div>
                         <div style="display: flex; gap: 8px;">
-                            <button onclick="tsGoNow()" style="background: #E5C158; color: #0B0F14; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; transition: background 0.2s;">Calibrate Now</button>
+                            <button onclick="tsGoNow()" style="background: #E5C158; color: #090A0D; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; transition: background 0.2s;">Calibrate Now</button>
                             <button onclick="tsCancelTimer()" style="background: rgba(255,255,255,0.05); color: #EDEDED; border: 1px solid rgba(255,255,255,0.1); padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: background 0.2s;">Cancel Timer</button>
                         </div>
                     </div>
@@ -3425,13 +3744,13 @@ def render_dashboard():
                     with st.container(border=True):
                         st.markdown("#### 🕸️ Investigation Knowledge Graph")
                         kg_fig = create_knowledge_graph(results)
-                        st.plotly_chart(kg_fig, width='stretch', config={'displayModeBar': False})
+                        st.plotly_chart(kg_fig, use_container_width=True, config={'displayModeBar': False})
 
                 with col_wf:
                     with st.container(border=True):
                         st.markdown("#### 📊 Explainable AI Waterfall Chart")
                         wf_fig = create_waterfall_chart(results)
-                        st.plotly_chart(wf_fig, width='stretch', config={'displayModeBar': False})
+                        st.plotly_chart(wf_fig, use_container_width=True, config={'displayModeBar': False})
 
             with col_results_side:
                 # ── System Intel Readout Panel ──
@@ -3448,37 +3767,31 @@ def render_dashboard():
                 
                 st.markdown(f"""<div class="right-intel-panel {risk_class}">
 <div style="text-align: center; margin-bottom: 1rem;">
-<div style="font-size: 0.72rem; color: var(--text-secondary); text-transform: uppercase; font-family: var(--font-mono); letter-spacing: 0.5px;">Current Verdict</div>
-<div style="font-size: 1.1rem; font-weight: 700; color: {risk_color}; margin-top: 2px;">{cat.upper()}</div>
+<div style="font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; font-family: var(--font-mono); letter-spacing: 0.08em;">Current Verdict</div>
+<div style="font-size: 1.1rem; font-weight: 700; color: {risk_color}; margin-top: 4px; font-family: var(--font-heading);">{cat.upper()}</div>
 </div>
-<div class="intel-metric-row">
-<div class="intel-metric-label">
-<span>🎯 Credibility Score</span>
-<span style="color: var(--accent); font-weight: 700;">{cred_val:.1f}%</span>
+<div style="margin-bottom: 0.75rem;">
+<div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 0.3rem;">
+<span style="color: var(--text-secondary);">🎯 Credibility Score</span>
+<span style="color: var(--accent); font-weight: 700; font-family: var(--font-mono);">{cred_val:.1f}%</span>
 </div>
-<div class="intel-progress-bg">
-<div class="intel-progress-bar" style="width: {cred_val}%; background-color: var(--accent);"></div>
+<div class="ts-progress ts-progress-gold"><div class="ts-progress-bar" style="width: {cred_val}%;"></div></div>
 </div>
+<div style="margin-bottom: 0.75rem;">
+<div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 0.3rem;">
+<span style="color: var(--text-secondary);">🛡️ System Reliability</span>
+<span style="color: var(--info); font-weight: 700; font-family: var(--font-mono);">{rel_val:.1f}%</span>
 </div>
-<div class="intel-metric-row">
-<div class="intel-metric-label">
-<span>🛡️ System Reliability</span>
-<span style="color: var(--accent-secondary); font-weight: 700;">{rel_val:.1f}%</span>
+<div class="ts-progress ts-progress-blue"><div class="ts-progress-bar" style="width: {rel_val}%;"></div></div>
 </div>
-<div class="intel-progress-bg">
-<div class="intel-progress-bar" style="width: {rel_val}%; background-color: var(--accent-secondary);"></div>
+<div style="margin-bottom: 0.75rem;">
+<div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 0.3rem;">
+<span style="color: var(--text-secondary);">📊 Evidence Strength</span>
+<span style="color: var(--success); font-weight: 700; font-family: var(--font-mono);">{ev_strength_val:.1f}%</span>
 </div>
+<div class="ts-progress ts-progress-green"><div class="ts-progress-bar" style="width: {ev_strength_val}%;"></div></div>
 </div>
-<div class="intel-metric-row">
-<div class="intel-metric-label">
-<span>📊 Evidence Strength</span>
-<span style="color: var(--success); font-weight: 700;">{ev_strength_val:.1f}%</span>
-</div>
-<div class="intel-progress-bg">
-<div class="intel-progress-bar" style="width: {ev_strength_val}%; background-color: var(--success);"></div>
-</div>
-</div>
-<div style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 0.8rem; font-size: 0.78rem;">
+<div style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.8rem; font-size: 0.78rem;">
 <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
 <span style="color: var(--text-secondary);">Risk Profile:</span>
 <span style="color: {risk_color}; font-weight: 700; font-family: var(--font-mono);">{risk_level}</span>
@@ -3585,14 +3898,14 @@ def render_dashboard():
                             data=pdf_bytes,
                             file_name=f"truthshield_{int(time.time())}.pdf",
                             mime="application/pdf",
-                            width='stretch'
+                            use_container_width=True
                         )
                         st.download_button(
                             label="📊 Export Data as CSV",
                             data=csv_bytes,
                             file_name=f"truthshield_{int(time.time())}.csv",
                             mime="text/csv",
-                            width='stretch'
+                            use_container_width=True
                         )
                         
                 with col_feed2:
@@ -3600,7 +3913,7 @@ def render_dashboard():
                         st.markdown("#### 💬 Calibrate Model")
                         st.caption("Submit Analyst feedback to improve classifier thresholds.")
                         st.markdown("<br><br>", unsafe_allow_html=True)
-                        if st.button("📢 Submit Accuracy Feedback", key="go_to_feedback_page_btn", type="primary", width='stretch'):
+                        if st.button("📢 Submit Accuracy Feedback", key="go_to_feedback_page_btn", type="primary", use_container_width=True):
                             st.session_state.page = "feedback"
                             st.rerun()
 
@@ -3616,10 +3929,10 @@ def render_dashboard():
                         st.markdown(f"""
                         <div style="display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 0.5rem;">
                             <a href="https://www.snopes.com/?s={search_query}" target="_blank" style="text-decoration:none;">
-                                <button style="width:100%; text-align:left; background:#141A24; color:var(--text-primary); border:1px solid var(--border-color); padding:0.4rem 0.8rem; border-radius:6px; cursor:pointer; font-size:0.75rem; font-family:var(--font-mono);">🔍 Search Snopes Index</button>
+                                <button style="width:100%; text-align:left; background:#151821; color:var(--text-primary); border:1px solid var(--border); padding:0.4rem 0.8rem; border-radius:6px; cursor:pointer; font-size:0.75rem; font-family:var(--font-mono);">🔍 Search Snopes Index</button>
                             </a>
                             <a href="https://www.politifact.com/search/?q={search_query}" target="_blank" style="text-decoration:none;">
-                                <button style="width:100%; text-align:left; background:#141A24; color:var(--text-primary); border:1px solid var(--border-color); padding:0.4rem 0.8rem; border-radius:6px; cursor:pointer; font-size:0.75rem; font-family:var(--font-mono);">⚖️ Search PolitiFact KB</button>
+                                <button style="width:100%; text-align:left; background:#151821; color:var(--text-primary); border:1px solid var(--border); padding:0.4rem 0.8rem; border-radius:6px; cursor:pointer; font-size:0.75rem; font-family:var(--font-mono);">⚖️ Search PolitiFact KB</button>
                             </a>
                             <a href="https://www.google.com/search?q={search_query}+fact+check" target="_blank" style="text-decoration:none;">
                                 <button style="width:100%; text-align:left; background:rgba(255,255,255,0.02); color:var(--text-primary); border:1px solid rgba(255,255,255,0.06); padding:0.5rem 1rem; border-radius:8px; cursor:pointer; font-weight:600;">🌐 Google Fact-Check Search</button>
@@ -3867,7 +4180,7 @@ def render_dashboard():
                 if game_q != "Choose a headline...":
                     if "1. " in game_q:
                         ans = st.radio("Is this headline Fact or Fiction?", ["Fact", "Fiction"], key="game_ans_1")
-                        eval_btn = st.button("Check Answer", key="game_btn_1", width='content')
+                        eval_btn = st.button("Check Answer", key="game_btn_1", )
                         if eval_btn:
                             if ans == "Fact":
                                 st.success("🎉 **Correct!** In late 2024, Earth temporarily captured a small asteroid named **2024 PT5** as a 'mini-moon' for approximately two months. It was widely reported by NASA and major astrophysics journals.")
@@ -3875,7 +4188,7 @@ def render_dashboard():
                                 st.error("❌ **Incorrect.** This is actually a **Fact**! Earth temporarily captured asteroid 2024 PT5 as a mini-moon in late 2024.")
                     elif "2. " in game_q:
                         ans = st.radio("Is this headline Fact or Fiction?", ["Fact", "Fiction"], key="game_ans_2")
-                        eval_btn = st.button("Check Answer", key="game_btn_2", width='content')
+                        eval_btn = st.button("Check Answer", key="game_btn_2", )
                         if eval_btn:
                             if ans == "Fiction":
                                 st.success("🎉 **Correct!** This is **Fiction**. While broccoli contains healthy antioxidants, claims of a 'complete cure for aging' are sensationalized clickbait and unverified by medical science.")
@@ -3883,7 +4196,7 @@ def render_dashboard():
                                 st.error("❌ **Incorrect.** This is **Fiction**! Although broccoli is nutritious, there is no medical cure for aging, and the headline is classic health misinformation.")
                     elif "3. " in game_q:
                         ans = st.radio("Is this headline Fact or Fiction?", ["Fact", "Fiction"], key="game_ans_3")
-                        eval_btn = st.button("Check Answer", key="game_btn_3", width='content')
+                        eval_btn = st.button("Check Answer", key="game_btn_3", )
                         if eval_btn:
                             if ans == "Fiction":
                                 st.success("🎉 **Correct!** This is **Fiction**. Bananas do contain trace amounts of radioactive Potassium-40, but you would need to eat **10 million bananas** in a single sitting to receive a lethal dose.")
@@ -3919,14 +4232,14 @@ def render_dashboard():
                     
                     # Map categories to their representative styling colors
                     theme_colors = {
-                        "REAL": "#10B981",                     # Emerald
-                        "HIGHLY CREDIBLE": "#10B981",          # Emerald
+                        "REAL": "#42D392",                     # Emerald
+                        "HIGHLY CREDIBLE": "#42D392",          # Emerald
                         "LIKELY REAL": "#34D399",              # Light Emerald
                         "UNCERTAIN": "#F59E0B",                # Gold
                         "LIKELY FAKE": "#F97316",              # Orange
-                        "HIGH RISK": "#EF4444",                # Vivid Red
-                        "HIGH RISK MISINFORMATION": "#EF4444", # Vivid Red
-                        "FAKE": "#EF4444",                     # Red
+                        "HIGH RISK": "#FF5A6B",                # Vivid Red
+                        "HIGH RISK MISINFORMATION": "#FF5A6B", # Vivid Red
+                        "FAKE": "#FF5A6B",                     # Red
                         "SATIRE": "#6366f1",                   # Indigo
                         "CLICKBAIT": "#f59e0b",                 # Amber
                         "MISLEADING": "#F97316"                 # Orange
@@ -3942,11 +4255,11 @@ def render_dashboard():
                     fig_pie.update_layout(
                         paper_bgcolor='rgba(0,0,0,0)',
                         plot_bgcolor='rgba(0,0,0,0)',
-                        font=dict(color="#E2E8F0", family="Space Grotesk"),
+                        font=dict(color="#F3F4F8", family="Space Grotesk"),
                         height=250,
                         margin=dict(l=10, r=10, t=10, b=10)
                     )
-                    st.plotly_chart(fig_pie, width='stretch')
+                    st.plotly_chart(fig_pie, use_container_width=True)
                     
             with col_a2:
                 with st.container(border=True):
@@ -3967,11 +4280,11 @@ def render_dashboard():
                         plot_bgcolor='rgba(0,0,0,0)',
                         xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
                         yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
-                        font=dict(color="#E2E8F0", family="Space Grotesk"),
+                        font=dict(color="#F3F4F8", family="Space Grotesk"),
                         height=250,
                         margin=dict(l=20, r=20, t=10, b=30)
                     )
-                    st.plotly_chart(fig_line, width='stretch')
+                    st.plotly_chart(fig_line, use_container_width=True)
                     
             col_a3, col_a4 = st.columns(2)
             with col_a3:
@@ -4001,11 +4314,11 @@ def render_dashboard():
                         paper_bgcolor='rgba(0,0,0,0)',
                         plot_bgcolor='rgba(0,0,0,0)',
                         xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
-                        font=dict(color="#E2E8F0", family="Space Grotesk"),
+                        font=dict(color="#F3F4F8", family="Space Grotesk"),
                         height=250,
                         margin=dict(l=120, r=10, t=10, b=30)
                     )
-                    st.plotly_chart(fig_bar, width='stretch')
+                    st.plotly_chart(fig_bar, use_container_width=True)
                     
             with col_a4:
                 with st.container(border=True):
@@ -4038,11 +4351,11 @@ def render_dashboard():
                         plot_bgcolor='rgba(0,0,0,0)',
                         xaxis=dict(title="Longitude", range=[-180, 180], showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
                         yaxis=dict(title="Latitude", range=[-90, 90], showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
-                        font=dict(color="#E2E8F0", family="Space Grotesk"),
+                        font=dict(color="#F3F4F8", family="Space Grotesk"),
                         height=250,
                         margin=dict(l=30, r=10, t=10, b=30)
                     )
-                    st.plotly_chart(fig_geo, width='stretch')
+                    st.plotly_chart(fig_geo, use_container_width=True)
         
         # Feedback Analytics Section
         st.markdown("---")
@@ -4166,7 +4479,7 @@ def render_dashboard():
                     with clf_cols[i]:
                         acc_pct = clf_acc * 100
                         # Color-code: green >= 85%, yellow >= 70%, red < 70%
-                        color = "#10B981" if acc_pct >= 85 else "#F59E0B" if acc_pct >= 70 else "#EF4444"
+                        color = "#42D392" if acc_pct >= 85 else "#F59E0B" if acc_pct >= 70 else "#FF5A6B"
                         st.markdown(f"""<div style="text-align:center; padding: 0.5rem 0;">
                             <div style="font-size: 1.5rem; font-weight: 700; color: {color};">{acc_pct:.2f}%</div>
                             <div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 2px;">{clf_name}</div>
@@ -4235,11 +4548,11 @@ def render_dashboard():
                         with st.container(border=True):
                             st.markdown("#### 📊 Live Verdict Distribution (Last 30 Days)")
                             verdict_colors = {
-                                "Highly Credible": "#10B981",
+                                "Highly Credible": "#42D392",
                                 "Likely Real": "#34D399",
                                 "Uncertain": "#F59E0B",
                                 "Likely Fake": "#F97316",
-                                "High Risk Misinformation": "#EF4444",
+                                "High Risk Misinformation": "#FF5A6B",
                                 "Satire / Parody": "#6366f1"
                             }
                             v_labels = list(verdict_dist_30d.keys())
@@ -4256,11 +4569,11 @@ def render_dashboard():
                                 plot_bgcolor='rgba(0,0,0,0)',
                                 xaxis=dict(showgrid=False),
                                 yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', title="Count"),
-                                font=dict(color="#E2E8F0", family="Space Grotesk"),
+                                font=dict(color="#F3F4F8", family="Space Grotesk"),
                                 height=250,
                                 margin=dict(l=40, r=10, t=10, b=60)
                             )
-                            st.plotly_chart(fig_vd, width='stretch')
+                            st.plotly_chart(fig_vd, use_container_width=True)
         except Exception:
             pass
         
@@ -4284,18 +4597,18 @@ def render_dashboard():
                 
                 fig_cm = go.Figure(data=go.Heatmap(
                     z=z, x=x, y=y,
-                    colorscale=[[0, '#0B0F14'], [0.5, '#F59E0B'], [1, '#10B981']],
+                    colorscale=[[0, '#090A0D'], [0.5, '#F59E0B'], [1, '#10B981']],
                     text=z, texttemplate="%{text}",
                     showscale=False
                 ))
                 fig_cm.update_layout(
                     paper_bgcolor='rgba(0,0,0,0)',
                     plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color="#E2E8F0", family="Space Grotesk"),
+                    font=dict(color="#F3F4F8", family="Space Grotesk"),
                     height=260,
                     margin=dict(l=60, r=10, t=10, b=30)
                 )
-                st.plotly_chart(fig_cm, width='stretch')
+                st.plotly_chart(fig_cm, use_container_width=True)
                 
         with col_e_charts2:
             with st.container(border=True):
@@ -4319,12 +4632,12 @@ def render_dashboard():
                     plot_bgcolor='rgba(0,0,0,0)',
                     xaxis=dict(title="False Positive Rate (1 - Specificity)", showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
                     yaxis=dict(title="True Positive Rate (Sensitivity)", showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
-                    font=dict(color="#E2E8F0", family="Space Grotesk"),
+                    font=dict(color="#F3F4F8", family="Space Grotesk"),
                     height=260,
                     margin=dict(l=60, r=10, t=10, b=30),
                     legend=dict(x=0.55, y=0.15)
                 )
-                st.plotly_chart(fig_roc, width='stretch')
+                st.plotly_chart(fig_roc, use_container_width=True)
 
         # ── 1. Model Drift Monitoring & Alerting ──
         drift_msg = None
@@ -4362,7 +4675,7 @@ def render_dashboard():
                 st.info("💡 **Retraining Info:** Retraining runs asynchronously as a background task. The dashboard will remain active using the existing model. Once complete, refresh the application to load the new weights.")
             with col_rt2:
                 st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("🚀 Trigger Ensemble Retraining", key="trigger_retraining_btn", width='stretch', type="primary"):
+                if st.button("🚀 Trigger Ensemble Retraining", key="trigger_retraining_btn", use_container_width=True, type="primary"):
                     try:
                         import subprocess
                         import sys
@@ -4425,7 +4738,7 @@ def render_dashboard():
                     data=csv_export,
                     file_name="truthshield_filtered_history.csv",
                     mime="text/csv",
-                    width='content'
+                    
                 )
             
             st.markdown("---")
@@ -4445,7 +4758,7 @@ def render_dashboard():
                         "REAL": "background:#10B981; color:#E2E8F0;",       # Emerald
                         "FAKE": "background:#EF4444; color:#E2E8F0;",       # Red
                         "SATIRE": "background:#8B5CF6; color:#E2E8F0;",     # Purple
-                        "CLICKBAIT": "background:#F59E0B; color:#0B0F14;",   # Amber
+                        "CLICKBAIT": "background:#F59E0B; color:#090A0D;",   # Amber
                         "MISLEADING": "background:#F97316; color:#E2E8F0;"   # Orange
                     }
                     badge_style = theme_colors.get(cat.upper(), "background:#64748B; color:#E2E8F0;")
@@ -4458,7 +4771,7 @@ def render_dashboard():
                         with col_h_score:
                             st.markdown(f"<span style='padding:0.35rem 0.8rem; border-radius:6px; font-weight:bold; {badge_style}'>{cat} ({score:.0f}%)</span>", unsafe_allow_html=True)
                         with col_h_btn:
-                            st.button("🔎 Load Analysis", key=f"hist_load_{row['id']}", width='stretch', on_click=load_history_callback, args=(row['text'],))
+                            st.button("🔎 Load Analysis", key=f"hist_load_{row['id']}", use_container_width=True, on_click=load_history_callback, args=(row['text'],))
 
     st.markdown("""
     <div class="footer">
@@ -4525,16 +4838,6 @@ def main():
     if "analysis_completed_time" not in st.session_state:
         st.session_state.analysis_completed_time = None
 
-    if st.session_state.page in ("landing", "login"):
-        st.markdown(f"""
-        <div class="hero-header" style="padding: 1rem 1.5rem; margin-bottom: 1.2rem; border-radius: 8px;">
-            <div style="text-align: center; margin-bottom: 0.5rem;">
-                <img src="{logo_base64}" style="width: 50px; height: 50px; border-radius: 50%; border: 1px solid var(--accent); padding: 2px; background: rgba(18, 15, 14, 0.8);">
-            </div>
-            <h1 style="font-size: 1.5rem !important;">TruthShield Platform</h1>
-            <p style="font-size: 0.8rem !important; margin-top: 0.1rem;">AI-powered credibility analysis using NLP & Machine Learning</p>
-        </div>
-        """, unsafe_allow_html=True)
 
 
     # Page routing logic
@@ -4565,17 +4868,14 @@ def main():
             style.textContent = `
                 .scroll-reveal {
                     opacity: 0 !important;
-                    transform: translateY(30px) scale(0.97) !important;
-                    transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), 
-                                transform 0.8s cubic-bezier(0.16, 1, 0.3, 1),
-                                filter 0.8s cubic-bezier(0.16, 1, 0.3, 1) !important;
-                    filter: blur(8px) !important;
-                    will-change: transform, opacity, filter;
+                    transform: translateY(16px) !important;
+                    transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), 
+                                transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) !important;
+                    will-change: transform, opacity;
                 }
                 .scroll-reveal.visible {
                     opacity: 1 !important;
-                    transform: translateY(0) scale(1) !important;
-                    filter: blur(0) !important;
+                    transform: translateY(0) !important;
                 }
             `;
             document.head.appendChild(style);
@@ -4583,7 +4883,7 @@ def main():
 
         const observerOptions = {
             root: null,
-            rootMargin: '0px 0px -40px 0px',
+            rootMargin: '0px 0px -30px 0px',
             threshold: 0.05
         };
 
@@ -4596,7 +4896,7 @@ def main():
         }, observerOptions);
 
         function setupReveal() {
-            const targets = document.querySelectorAll('div[data-testid="stVerticalBlockBorderWrapper"], .metric-card, .info-box, .verdict-real, .verdict-fake, .verdict-uncertain, .stAlert, .sentence-high, .sentence-medium, .sentence-low');
+            const targets = document.querySelectorAll('div[data-testid="stVerticalBlockBorderWrapper"], .metric-card, .ts-card, .feature-card, .info-box, .edu-card, .source-dossier-card, .verdict-real, .verdict-fake, .verdict-uncertain, .stAlert, .sentence-high, .sentence-medium, .sentence-low');
             targets.forEach(el => {
                 if (!el.classList.contains('scroll-reveal')) {
                     el.classList.add('scroll-reveal');
