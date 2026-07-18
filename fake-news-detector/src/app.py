@@ -21,6 +21,7 @@ except ImportError:
 
 import joblib
 import streamlit as st
+import streamlit.components.v1 as components
 import plotly.graph_objects as go
 import numpy as np
 import base64
@@ -33,6 +34,8 @@ import time
 import math
 import tempfile
 # nltk is deferred to first use (saves ~3s on startup)
+if "light_mode" not in st.session_state:
+    st.session_state.light_mode = False
 _sent_tokenize = None
 
 def _get_sent_tokenize():
@@ -132,6 +135,21 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+st.html("""
+<script>
+(function() {
+    var doc = window.parent.document;
+    if (!doc.getElementById('material-symbols-font')) {
+        var link = doc.createElement('link');
+        link.id = 'material-symbols-font';
+        link.rel = 'stylesheet';
+        link.href = 'https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap';
+        doc.head.appendChild(link);
+    }
+})();
+</script>
+""")
+
 st.markdown("""
 <style>
     /* ═══════════════════════════════════════════════════════════
@@ -140,6 +158,7 @@ st.markdown("""
        ═══════════════════════════════════════════════════════════ */
 
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
 
     /* ── Design Tokens ────────────────────────────────────────── */
     :root {
@@ -180,13 +199,44 @@ st.markdown("""
         --transition-fast: 150ms cubic-bezier(.4,0,.2,1);
     }
 
+    /* ── Light Mode Overrides ────────────────────────────────────────── */
+    .light-mode {
+        --bg-primary: #ffffff;
+        --bg-surface: #f8f9fa;
+        --bg-card: #ffffff;
+        --bg-card-hover: #f1f3f5;
+        --bg-input: #f8f9fa;
+        --border: rgba(0,0,0,.1);
+        --border-hover: rgba(0,0,0,.15);
+        --border-accent: rgba(231,198,90,.25);
+        --accent: #B8860B;
+        --accent-hover: #D4AF37;
+        --accent-muted: rgba(184,134,11,0.12);
+        --info: #1E90FF;
+        --info-muted: rgba(30,144,255,.1);
+        --success: #2E8B57;
+        --success-muted: rgba(46,139,87,.1);
+        --warning: #DAA520;
+        --warning-muted: rgba(218,165,32,.1);
+        --danger: #CD5C5C;
+        --danger-muted: rgba(205,92,92,.1);
+        --text-primary: #212529;
+        --text-secondary: #6c757d;
+        --text-muted: #adb5bd;
+    }
+
     /* ── Global Reset ─────────────────────────────────────────── */
     .stApp {
         background: var(--bg-primary) !important;
         color: var(--text-primary) !important;
         font-family: var(--font-body) !important;
+        transition: background-color 0.3s ease, color 0.3s ease;
     }
-    .stApp > header { background: transparent !important; }
+    .stApp > header,
+    .stAppHeader,
+    [data-testid="stHeader"] {
+        display: none !important;
+    }
     .block-container {
         padding: 1.5rem 2rem 3rem !important;
         max-width: 1400px !important;
@@ -194,6 +244,12 @@ st.markdown("""
     [data-testid="stSidebar"] {
         background: var(--bg-surface) !important;
         border-right: 1px solid var(--border) !important;
+        transform: none !important;
+        min-width: 280px !important;
+        width: 280px !important;
+        visibility: visible !important;
+        display: flex !important;
+        position: relative !important;
     }
     [data-testid="stSidebar"] .block-container {
         padding: 1.5rem 1.25rem !important;
@@ -210,6 +266,28 @@ st.markdown("""
         margin: 0.75rem 0 !important;
     }
     section[data-testid="stSidebar"] > div { padding-top: 0 !important; }
+    /* Hide sidebar collapse button (icon text leaks as raw text) */
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="stSidebarNavCollapseIcon"],
+    [data-testid="stSidebar"] button[kind="headerNoPadding"],
+    [data-testid="stSidebar"] header {
+        display: none !important;
+    }
+    /* Sidebar button explicit styling */
+    [data-testid="stSidebar"] .stButton > button {
+        background: rgba(255,255,255,.08) !important;
+        color: var(--text-primary) !important;
+        border: 1px solid rgba(255,255,255,.15) !important;
+        width: 100% !important;
+        font-size: 0.85rem !important;
+        padding: 0.5rem 1rem !important;
+        border-radius: var(--radius-md) !important;
+    }
+    [data-testid="stSidebar"] .stButton > button:hover {
+        background: rgba(255,255,255,.14) !important;
+        border-color: var(--accent) !important;
+        color: var(--accent) !important;
+    }
 
     /* ── Typography ───────────────────────────────────────────── */
     h1, h2, h3 {
@@ -598,6 +676,10 @@ st.markdown("""
 
     /* ── Landing Hero ─────────────────────────────────────────── */
     .landing-hero {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
         text-align: center;
         padding: 3rem 1rem 2rem;
         position: relative;
@@ -637,7 +719,7 @@ st.markdown("""
         font-family: var(--font-body);
         font-size: 1.05rem;
         color: var(--text-secondary);
-        max-width: 520px;
+        max-width: 580px;
         margin: 0 auto 2rem;
         line-height: 1.6;
     }
@@ -967,6 +1049,77 @@ st.markdown("""
     @keyframes countUp {
         from { opacity: 0; transform: translateY(8px); }
         to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Missing Component Styles ────────────────────────────── */
+    .right-panel-title {
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--accent);
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        margin-bottom: 0.75rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--border);
+    }
+    .intel-state-badge {
+        display: inline-block;
+        padding: 0.2rem 0.6rem;
+        border-radius: 100px;
+        font-family: var(--font-mono);
+        font-size: 0.68rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+    }
+    .edu-body {
+        padding: 1.25rem;
+    }
+    .edu-icon {
+        font-size: 1.4rem;
+        margin-bottom: 0.5rem;
+    }
+    .edu-title {
+        font-family: var(--font-heading);
+        font-size: 0.92rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 0.3rem;
+    }
+    .edu-desc {
+        font-size: 0.78rem;
+        color: var(--text-muted);
+        line-height: 1.5;
+    }
+    .timeline-title {
+        font-family: var(--font-heading);
+        font-size: 0.88rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 0.2rem;
+    }
+    .timeline-desc {
+        font-size: 0.78rem;
+        color: var(--text-muted);
+        line-height: 1.5;
+    }
+    .auth-step.disabled {
+        opacity: 0.35;
+    }
+    .resend-btn {
+        background: transparent !important;
+        border: 1px solid var(--border) !important;
+        color: var(--accent) !important;
+        font-family: var(--font-body) !important;
+        font-size: 0.8rem !important;
+        padding: 0.4rem 1rem !important;
+        border-radius: var(--radius-sm) !important;
+        cursor: pointer !important;
+        transition: all var(--transition) !important;
+    }
+    .resend-btn:hover {
+        border-color: var(--accent) !important;
+        background: var(--accent-muted) !important;
     }
 
     /* ── Responsive ───────────────────────────────────────────── */
@@ -2355,11 +2508,11 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
     
     # Map to 3-tier display verdict
     if credibility >= 0.65:
-        display_verdict = "\U0001f7e2 Likely True"
+        display_verdict = "🟢 Likely True"
     elif credibility >= 0.45:
-        display_verdict = "\U0001f7e1 Needs Verification"
+        display_verdict = "🟡 Needs Verification"
     else:
-        display_verdict = "\U0001f534 Likely Misleading"
+        display_verdict = "🔴 Likely Misleading"
     
     return {
         'prediction': final_prediction,
@@ -2803,7 +2956,7 @@ def render_landing():
     # ── Immersive Hero Section ──
     st.markdown("""
     <div class="landing-hero">
-        <div class="hero-shield">\U0001f6e1\ufe0f</div>
+        <div class="hero-shield">🛡️</div>
         <div class="hero-header">Intelligence-Grade<br><span class="accent">Credibility Analysis</span></div>
         <div class="hero-divider"></div>
         <p class="hero-subtitle">
@@ -2848,7 +3001,7 @@ def render_landing():
     st.markdown("""
     <div class="feature-grid">
         <div class="feature-card">
-            <div class="feature-icon">\U0001f9e0</div>
+            <div class="feature-icon">🧠</div>
             <div class="feature-title">Neural Intelligence</div>
             <div class="feature-desc">
                 Multi-model ensemble combining TF-IDF classifiers, DistilBERT transformers,
@@ -2856,7 +3009,7 @@ def render_landing():
             </div>
         </div>
         <div class="feature-card">
-            <div class="feature-icon">\U0001f50d</div>
+            <div class="feature-icon">🔍</div>
             <div class="feature-title">Source Intelligence</div>
             <div class="feature-desc">
                 Domain reputation analysis, political bias detection, fact-check cross-referencing,
@@ -2864,7 +3017,7 @@ def render_landing():
             </div>
         </div>
         <div class="feature-card">
-            <div class="feature-icon">\u26a1</div>
+            <div class="feature-icon">⚡</div>
             <div class="feature-title">Real-Time Verification</div>
             <div class="feature-desc">
                 Automated claim extraction, Google Fact Check API integration, temporal analysis,
@@ -2915,9 +3068,9 @@ def render_landing():
     st.markdown("""
     <div class="footer">
         <p style="margin-bottom: 0.5rem; letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.65rem;">
-            Enterprise Grade \u00b7 Open Source \u00b7 Research Backed \u00b7 AI Powered
+            Enterprise Grade · Open Source · Research Backed · AI Powered
         </p>
-        <p>TruthShield Intelligence Platform v3.0 \u2014 Built for analysts, journalists, and researchers.</p>
+        <p>TruthShield Intelligence Platform v3.0 — Built for analysts, journalists, and researchers.</p>
         <p>This tool is for educational and research purposes. Always verify information with trusted sources.</p>
     </div>
     """, unsafe_allow_html=True)
@@ -3355,6 +3508,21 @@ def render_dashboard():
             index=0,
             key="input_method_select"
         )
+        # Theme toggle
+        st.checkbox("☀️ Light Mode", key="light_mode")
+        components.html(
+            f"""
+            <script>
+                var mode = {str(st.session_state.light_mode).lower()};
+                if (mode) {{
+                    document.body.classList.add('light-mode');
+                }} else {{
+                    document.body.classList.remove('light-mode');
+                }}
+            </script>
+            """,
+            height=0,
+        )
         st.markdown("---")
         with st.expander("🇮🇳 Live India News Feed", expanded=False):
             _india_feed = _get_india_feed()
@@ -3457,7 +3625,7 @@ def render_dashboard():
     """, unsafe_allow_html=True)
 
     # ── Workspace Tabs ──
-    tab_analyze, tab_education, tab_analytics, tab_evaluation, tab_history = st.tabs(["🔍 Credibility Analyzer", "📖 Media Literacy Hub", "📊 Analytics & Insights", "🔬 Model Evaluation & Research", "📋 Analysis History"])
+    tab_analyze, tab_education, tab_analytics, tab_evaluation, tab_history = st.tabs(["Credibility Analyzer", "Media Literacy Hub", "Analytics & Insights", "Model Evaluation & Research", "Analysis History"])
 
     with tab_analyze:
         article_text = None
