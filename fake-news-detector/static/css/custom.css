@@ -67,7 +67,7 @@
         --danger-muted: rgba(205,92,92,.1);
         --text-primary: #212529;
         --text-secondary: #6c757d;
-        --text-muted: #adb5bd;
+        --text-muted: #6c757d;
     }
 
     /* ── Global Reset ─────────────────────────────────────────── */
@@ -758,10 +758,38 @@
         border: 1px solid var(--border) !important;
         border-radius: var(--radius-md) !important;
     }
+    [data-testid="stExpander"] summary {
+        color: var(--text-primary) !important;
+        font-family: var(--font-body) !important;
+        font-size: 0.85rem !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        width: 100% !important;
+        padding-right: 1.5rem !important;
+        box-sizing: border-box !important;
+    }
     [data-testid="stExpander"] summary span {
         font-family: var(--font-body) !important;
         font-size: 0.85rem !important;
         color: var(--text-primary) !important;
+        flex: 1 1 auto !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+    }
+    /* Style the expand/cross marker (arrow) */
+    [data-testid="stExpander"] summary::-webkit-details-marker {
+        color: var(--text-primary) !important;
+        flex-shrink: 0 !important;
+        width: 1rem !important;
+        height: 1rem !important;
+    }
+    [data-testid="stExpander"] summary::marker {
+        color: var(--text-primary) !important;
+        flex-shrink: 0 !important;
+        width: 1rem !important;
+        height: 1rem !important;
     }
 
     /* ── Hidden Utility ───────────────────────────────────────── */

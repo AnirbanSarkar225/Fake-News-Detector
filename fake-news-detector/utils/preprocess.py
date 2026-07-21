@@ -27,7 +27,7 @@ def ensure_nltk_data():
 class TextPreprocessor:
     """
     Comprehensive text preprocessor for news article classification.
-    
+
     Handles:
     - HTML tag removal
     - URL removal
@@ -48,6 +48,29 @@ class TextPreprocessor:
             nltk.download('stopwords', quiet=True)
             self.stop_words = set(stopwords.words('english'))
 
+        # Common acronyms that should not be flagged as sensational
+        self.common_acronyms = {
+            'NASA', 'WHO', 'UNICEF', 'NATO', 'EU', 'UN', 'WHO', 'CDC', 'FDA',
+            'USA', 'UK', 'USSR', 'US', 'UFO', 'ESA', 'ISRO', 'DRDO', 'BARC',
+            'ICAR', 'CSIR', 'IIT', 'IIM', 'AIIMS', 'RBI', 'SEBI', 'NITI',
+            'CAG', 'CBI', 'NIA', 'BCCI', 'IPL', 'PTI', 'ANI', 'PIB',
+            'Doordarshan', 'Prasar', 'Bharati', 'Aadhaar', 'UPI', 'GST',
+            'NEET', 'JEE', 'UPSC', 'GMT', 'IST', 'EST', 'PST', 'MST', 'CST',
+            'MIT', 'Harvard', 'Yale', 'Oxford', 'Cambridge', 'ETH', 'CERN',
+            'LHC', 'DNA', 'RNA', 'HIV', 'AIDS', 'COVID', 'SARS', 'MERS',
+            'Ebola', 'Zika', 'UNHCR', 'UNESCO', 'UNICEF', 'WHO', 'WTO', 'IMF',
+            'World Bank', 'UN', 'UNGA', 'UNSC', 'ICJ', 'ICC', 'NATO', 'WTO',
+            'WIPO', 'ILO', 'UNHCR', 'UNRWA', 'UNIDO', 'UNWTO', 'UNODC', 'UNEP',
+            'UN-Habitat', 'UNFCCC', 'UNCLOS', 'UNCCD', 'UNCAC', 'UNDRIP',
+            'UDHR', 'ICCPR', 'ICESCR', 'CEDAW', 'CAT', 'CRC', 'CRPD',
+            'WHO', 'ILO', 'IMF', 'World Bank', 'WTO', 'WIPO', 'ILO', 'UNHCR',
+            'UNRWA', 'UNIDO', 'UNWTO', 'UNODC', 'UNEP', 'UN-Habitat',
+            'UNFCCC', 'UNCLOS', 'UNCCD', 'UNCAC', 'UNDRIP', 'UDHR',
+            'ICCPR', 'ICESCR', 'CEDAW', 'CAT', 'CRC', 'CRPD'
+        }
+
+        # Sensationalism patterns (exclamation/question patterns and all-caps words pattern)
+        self.all_caps_pattern = re.compile(r'\b[A-Z]{5,}\b')  # Matches ALL-CAPS words of 5+ letters
         self.sensational_patterns = [
             re.compile(r'\b(?:breaking|exclusive|shocking|urgent|alert)\b', re.IGNORECASE),
             re.compile(r'\b(?:exposed|revealed|leaked|secret|coverup|cover-up)\b', re.IGNORECASE),
@@ -56,7 +79,7 @@ class TextPreprocessor:
             re.compile(r'\b(?:miracle|cure-all|conspiracy|hoax)\b', re.IGNORECASE),
             re.compile(r'!{2,}'),
             re.compile(r'\?{2,}'),
-            re.compile(r'\b[A-Z]{5,}\b'), # Case-sensitive: only matches actual ALL-CAPS words!
+            self.all_caps_pattern  # Last pattern: all-caps words (will be filtered for common acronyms)
         ]
 
         # Red-flag patterns: strong indicators of fabricated or misleading content
@@ -152,7 +175,7 @@ class TextPreprocessor:
     def preprocess_for_model(self, text: str) -> str:
         """
         Full preprocessing pipeline for model input.
-        
+
         Applies cleaning, lowercasing, lemmatization, and stopword removal.
 
         Args:
@@ -163,8 +186,8 @@ class TextPreprocessor:
         """
         text = self.clean_text(text)
         text = text.lower()
-        # Fast regex tokenization: matches words of length 3 or more
-        tokens = re.findall(r'\b[a-z]{3,}\b', text)
+        # Fast regex tokenization: matches words of length 2 or more
+        tokens = re.findall(r'\b[a-z]{2,}\b', text)
         # Lemmatize tokens for better generalization
         tokens = [self.lemmatizer.lemmatize(t) for t in tokens if t not in self.stop_words]
         return ' '.join(tokens)
@@ -192,7 +215,7 @@ class TextPreprocessor:
     def extract_claims(self, text: str) -> list:
         """
         Extract key factual claims from article text for fact verification.
-        
+
         Identifies sentences containing factual assertions — those with
         numbers, dates, named entities, or definitive statements.
 
@@ -244,7 +267,7 @@ class TextPreprocessor:
     def compute_text_features(self, text: str) -> dict:
         """
         Compute numeric features from text for enhanced classification.
-        
+
         Returns features that can be used alongside TF-IDF for improved accuracy.
 
         Args:
@@ -311,6 +334,9 @@ class TextPreprocessor:
         for pattern in self.sensational_patterns:
             matches = pattern.findall(text)
             if matches:
+                if pattern is self.all_caps_pattern:
+                    # Filter out common acronyms from all-caps matches
+                    matches = [m for m in matches if m not in self.common_acronyms]
                 results['suspicious_patterns'].extend([m for m in matches if m])
 
         for pattern in self.credibility_patterns:
@@ -364,7 +390,7 @@ class TextPreprocessor:
                 results['credibility_score'] = min(results['credibility_score'] + 0.15, 1.0)
             # Proper sentence structure (avg sentence length > 12 words)
             sentences = text.split('.')
-            real_sentences = [s.strip() for s in sentences if len(s.strip().split()) > 3]
+            real_sentences = [s.strip() for s in sentences if len(s.split()) > 3]
             if real_sentences:
                 avg_sent_len = sum(len(s.split()) for s in real_sentences) / len(real_sentences)
                 if avg_sent_len > 12:

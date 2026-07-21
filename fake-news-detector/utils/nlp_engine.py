@@ -26,7 +26,7 @@ try:
 except LookupError:
     nltk.download('vader_lexicon', quiet=True)
 
-# ── Optional imports — loaded lazily to speed up app startup ──────────────
+# ── Optional imports — loaded lazily to speed up app startup ──
 
 # VADER (lightweight, load eagerly)
 try:
@@ -117,9 +117,9 @@ class NLPEngine:
             'Iran', 'Iraq', 'Syria', 'Ukraine', 'Israel', 'Palestine'
         }
 
-    # ══════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════════════════
     # COMPONENT 1: VADER Sentiment Analysis
-    # ══════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════════════════════════
 
     def get_sentiment_metrics(self, text):
         """
@@ -158,9 +158,9 @@ class NLPEngine:
         anger_count = sum(1 for w in words if w in self.anger_words)
         joy_count = sum(1 for w in words if w in self.joy_words)
 
-        fear_score = min((fear_count / total_words) * 30.0, 1.0)
-        anger_score = min((anger_count / total_words) * 30.0, 1.0)
-        joy_score = min((joy_count / total_words) * 30.0, 1.0)
+        fear_score = min(fear_count / total_words, 1.0)
+        anger_score = min(anger_count / total_words, 1.0)
+        joy_score = min(joy_count / total_words, 1.0)
 
         # Normalize emotion scores to sum ≤ 1
         emotion_total = fear_score + anger_score + joy_score
@@ -184,9 +184,9 @@ class NLPEngine:
             "dominant_emotion": dominant
         }
 
-    # ══════════════════════════════════════════════════════════════════════
+    # ════════════════════════════════════════════════════════════════════════════
     # COMPONENT 2: TextRank Summarization
-    # ══════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════════════════
 
     def generate_summary(self, text, max_sentences=3):
         """
@@ -227,7 +227,7 @@ class NLPEngine:
         n = len(sentences)
         damping = 0.85
         scores = np.ones(n) / n
-        
+
         # Normalize similarity matrix rows
         row_sums = similarity_matrix.sum(axis=1, keepdims=True)
         row_sums[row_sums == 0] = 1.0
@@ -272,9 +272,9 @@ class NLPEngine:
         top_indices = [idx for idx, _ in sorted(sent_scores, key=lambda x: x[1], reverse=True)[:max_sentences]]
         return " ".join([sentences[idx] for idx in sorted(top_indices)])
 
-    # ══════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════════════════
     # COMPONENT 3: SHAP Explainability
-    # ══════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════════════════
 
     def explain_with_shap(self, text, model_pipeline):
         """
@@ -356,13 +356,16 @@ class NLPEngine:
         weights = None
         if hasattr(classifier, 'estimators_'):
             sub_coefs = []
-            ensemble_weights = classifier.weights if hasattr(classifier, 'weights') and classifier.weights is not None else [1] * len(classifier.estimators_)
-            
+            ensemble_weights = (
+                classifier.weights if hasattr(classifier, 'weights') and
+                classifier.weights is not None else [1] * len(classifier.estimators_)
+            )
+
             for sub_clf, w in zip(classifier.estimators_, ensemble_weights):
                 coef = get_coef(sub_clf)
                 if coef is not None:
                     sub_coefs.append((coef, w))
-            
+
             if sub_coefs:
                 total_w = sum(w for _, w in sub_coefs)
                 weighted_sum = sum(coef[0] * w for coef, w in sub_coefs)
@@ -405,9 +408,9 @@ class NLPEngine:
 
         return fake_drivers, real_drivers
 
-    # ══════════════════════════════════════════════════════════════════════
+    # ════════════════════════════════════════════════════════════════════════════
     # COMPONENT 4: spaCy NER Integration
-    # ══════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════════════════
 
     def extract_entities(self, text):
         """
@@ -495,9 +498,9 @@ class NLPEngine:
             "money": []
         }
 
-    # ══════════════════════════════════════════════════════════════════════
+    # ════════════════════════════════════════════════════════════════════════════
     # Sentence Analysis (unchanged)
-    # ══════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════════════════
 
     def analyze_sentences(self, text, model_pipeline):
         """
@@ -540,4 +543,3 @@ class NLPEngine:
             })
 
         return results
-

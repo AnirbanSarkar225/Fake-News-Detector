@@ -139,6 +139,7 @@ st.html("""
 <script>
 (function() {
     var doc = window.parent.document;
+    // Load Material Symbols font
     if (!doc.getElementById('material-symbols-font')) {
         var link = doc.createElement('link');
         link.id = 'material-symbols-font';
@@ -146,6 +147,38 @@ st.html("""
         link.href = 'https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap';
         doc.head.appendChild(link);
     }
+    // Known Streamlit Material icon names that leak as text
+    var iconNames = ['arrow_right', 'arrow_left', 'arrow_drop_down', 'arrow_drop_up',
+        'keyboard_double_arrow_right', 'keyboard_double_arrow_left',
+        'double_arrow_right', 'double_arrow', 'expand_more', 'expand_less',
+        'chevron_right', 'chevron_left', 'close', 'menu', 'search'];
+
+    function fixIcons() {
+        // Walk ALL text nodes in the parent document
+        var walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null, false);
+        var node;
+        while ((node = walker.nextNode())) {
+            var t = node.textContent.trim();
+            if (!t) continue;
+            // Check if text matches or ends with a known icon name
+            for (var i = 0; i < iconNames.length; i++) {
+                if (t === iconNames[i] || t.endsWith('_' + iconNames[i]) || t === '_' + iconNames[i]) {
+                    node.parentNode.style.fontSize = '0';
+                    node.parentNode.style.overflow = 'hidden';
+                    node.parentNode.style.width = '20px';
+                    node.parentNode.style.height = '20px';
+                    node.parentNode.style.display = 'inline-block';
+                    node.textContent = '';
+                    break;
+                }
+            }
+        }
+    }
+    setTimeout(fixIcons, 300);
+    setTimeout(fixIcons, 800);
+    setTimeout(fixIcons, 1500);
+    var obs = new MutationObserver(function() { setTimeout(fixIcons, 50); });
+    obs.observe(doc.body, { childList: true, subtree: true });
 })();
 </script>
 """)
@@ -221,8 +254,16 @@ st.markdown("""
         --danger: #CD5C5C;
         --danger-muted: rgba(205,92,92,.1);
         --text-primary: #212529;
-        --text-secondary: #6c757d;
-        --text-muted: #adb5bd;
+        --text-secondary: #212529;
+        --text-muted: #495057;
+        color: #212529 !important;
+        background-color: #ffffff !important;
+    }
+
+    /* Ensure the main app area also gets the light mode colors */
+    .light-mode .stApp {
+        color: #212529 !important;
+        background-color: #ffffff !important;
     }
 
     /* ── Global Reset ─────────────────────────────────────────── */
@@ -236,6 +277,40 @@ st.markdown("""
     .stAppHeader,
     [data-testid="stHeader"] {
         display: none !important;
+    }
+    /* Fix ALL Material Symbols icon text leaks globally */
+    .material-symbols-rounded,
+    .material-symbols-outlined,
+    span[class*="material-symbols"],
+    [data-testid="stExpanderToggleIcon"],
+    .streamlit-expanderHeader span[class*="material"] {
+        font-size: 0 !important;
+        color: transparent !important;
+        width: 1.2em !important;
+        height: 1.2em !important;
+        display: inline-block !important;
+        position: relative !important;
+        vertical-align: middle !important;
+    }
+    .material-symbols-rounded::before,
+    .material-symbols-outlined::before,
+    span[class*="material-symbols"]::before,
+    [data-testid="stExpanderToggleIcon"]::before {
+        content: "›" !important;
+        font-size: 1.2rem !important;
+        color: var(--text-muted) !important;
+        font-family: var(--font-body) !important;
+        position: absolute !important;
+        top: 50% !important;
+        left: 50% !important;
+        transform: translate(-50%, -50%) !important;
+        line-height: 1 !important;
+    }
+    [aria-expanded="true"] .material-symbols-rounded::before,
+    [aria-expanded="true"] .material-symbols-outlined::before,
+    [aria-expanded="true"] span[class*="material-symbols"]::before,
+    [aria-expanded="true"] [data-testid="stExpanderToggleIcon"]::before {
+        content: "⌄" !important;
     }
     .block-container {
         padding: 1.5rem 2rem 3rem !important;
@@ -3514,17 +3589,24 @@ def render_dashboard():
             f"""
             <script>
                 var mode = {str(st.session_state.light_mode).lower()};
-                if (mode) {{
-                    document.body.classList.add('light-mode');
-                }} else {{
-                    document.body.classList.remove('light-mode');
+                // Apply to Streamlit app container
+                var app = window.parent.document.querySelector('.stApp');
+                if (app) {{
+                    app.classList.toggle('light-mode', mode);
                 }}
             </script>
             """,
             height=0,
         )
+        # Read India News Feed button
+        st.button(
+            "Read India News Feed",
+            key="read_india_news_btn",
+            use_container_width=True,
+            help="Click to load or refresh the India news feed"
+        )
         st.markdown("---")
-        with st.expander("🇮🇳 Live India News Feed", expanded=False):
+        with st.expander("Feed", expanded=False):
             _india_feed = _get_india_feed()
             if _india_feed is not None:
                 feed_category = st.selectbox(
@@ -3797,14 +3879,14 @@ def render_dashboard():
                     st.rerun()
                 else:
                     st.html(f"""
-                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: rgba(229, 193, 88, 0.04); border: 1px solid rgba(229, 193, 88, 0.2); border-radius: 8px; padding: 12px 18px; display: flex; justify-content: space-between; align-items: center; color: #EDEDED; font-size: 14px; margin-bottom: 0.5rem; backdrop-filter: blur(8px);">
+                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: rgba(229, 193, 88, 0.04); border: 1px solid rgba(229, 193, 88, 0.2); border-radius: 8px; padding: 12px 18px; display: flex; justify-content: space-between; align-items: center; color: var(--text-primary); font-size: 14px; margin-bottom: 0.5rem; backdrop-filter: blur(8px);">
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <span style="font-size: 1.15rem;">⏱️</span>
                             <span>Redirecting to <b>Accuracy Calibration (Feedback)</b> in <span id="ts-timer" style="color: #E5C158; font-weight: bold; font-family: monospace; font-size: 1.1rem;">{remaining}</span> seconds...</span>
                         </div>
                         <div style="display: flex; gap: 8px;">
                             <button onclick="tsGoNow()" style="background: #E5C158; color: #090A0D; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; transition: background 0.2s;">Calibrate Now</button>
-                            <button onclick="tsCancelTimer()" style="background: rgba(255,255,255,0.05); color: #EDEDED; border: 1px solid rgba(255,255,255,0.1); padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: background 0.2s;">Cancel Timer</button>
+                            <button onclick="tsCancelTimer()" style="background: rgba(255,255,255,0.05); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.1); padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: background 0.2s;">Cancel Timer</button>
                         </div>
                     </div>
                     <script>
