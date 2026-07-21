@@ -57,3 +57,4 @@ config/pyrightconfig.json
 # Test data subdirectory
 data/test data/
 
+CLAUDE.md
