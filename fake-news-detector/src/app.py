@@ -27,12 +27,13 @@ import numpy as np
 import base64
 import json
 import sqlite3
+import secrets
+import hashlib
 import random
 import re
 import pandas as pd
 import time
 import math
-import tempfile
 # nltk is deferred to first use (saves ~3s on startup)
 if "light_mode" not in st.session_state:
     st.session_state.light_mode = False
@@ -65,7 +66,6 @@ def get_base64_logo():
 
 logo_base64 = get_base64_logo()
 
-
 def email_to_display_name(email):
     """Extract a human-readable display name from an email address (Canva-style).
     
@@ -90,7 +90,6 @@ def email_to_display_name(email):
     name_parts = [p.capitalize() for p in parts]
     return " ".join(name_parts)
 
-
 def get_user_initials(display_name):
     """Get 1-2 letter initials from a display name for the avatar.
     
@@ -104,7 +103,6 @@ def get_user_initials(display_name):
     if len(words) >= 2:
         return (words[0][0] + words[-1][0]).upper()
     return words[0][0].upper()
-
 
 def get_avatar_gradient(email):
     """Deterministically assign a gradient color pair based on email hash."""
@@ -122,7 +120,6 @@ def get_avatar_gradient(email):
     ]
     idx = hash(email or "") % len(gradients)
     return gradients[idx]
-
 
 sys.path.insert(0, PROJECT_ROOT)
 from utils.preprocess import TextPreprocessor
@@ -192,7 +189,6 @@ st.markdown("""
 
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
-
     /* ── Design Tokens ────────────────────────────────────────── */
     :root {
         --bg-primary: #090A0D;
@@ -259,11 +255,122 @@ st.markdown("""
         color: #212529 !important;
         background-color: #ffffff !important;
     }
-
-    /* Ensure the main app area also gets the light mode colors */
     .light-mode .stApp {
         color: #212529 !important;
         background-color: #ffffff !important;
+    }
+
+    /* ── Light Mode: Force readable text on ALL elements ──────── */
+    .light-mode .stApp,
+    .light-mode .stApp * {
+        color: #212529;
+    }
+    .light-mode p, .light-mode span, .light-mode label, .light-mode div,
+    .light-mode li, .light-mode td, .light-mode th, .light-mode caption,
+    .light-mode h1, .light-mode h2, .light-mode h3, .light-mode h4, .light-mode h5 {
+        color: #212529 !important;
+    }
+    /* Sidebar in light mode */
+    .light-mode [data-testid="stSidebar"],
+    .light-mode [data-testid="stSidebar"] * {
+        color: #212529 !important;
+    }
+    .light-mode [data-testid="stSidebar"] {
+        background: #f8f9fa !important;
+        border-right: 1px solid rgba(0,0,0,.1) !important;
+    }
+    /* Radio, checkbox, selectbox labels */
+    .light-mode .stRadio label,
+    .light-mode .stCheckbox label,
+    .light-mode .stSelectbox label,
+    .light-mode .stRadio label span,
+    .light-mode .stCheckbox label span,
+    .light-mode [data-testid="stMarkdownContainer"] p,
+    .light-mode [data-testid="stMarkdownContainer"] span,
+    .light-mode [data-testid="stMarkdownContainer"] li {
+        color: #212529 !important;
+        opacity: 1 !important;
+    }
+    /* Radio/checkbox option text */
+    .light-mode .stRadio [role="radiogroup"] label p,
+    .light-mode .stRadio [role="radiogroup"] label div,
+    .light-mode .stCheckbox span {
+        color: #343a40 !important;
+        opacity: 1 !important;
+    }
+    /* Tabs in light mode */
+    .light-mode .stTabs [data-baseweb="tab"] {
+        color: #495057 !important;
+    }
+    .light-mode .stTabs [aria-selected="true"] {
+        color: #212529 !important;
+    }
+    /* Buttons in light mode */
+    .light-mode .stButton > button {
+        color: #212529 !important;
+        background: #ffffff !important;
+        border: 1px solid rgba(0,0,0,.15) !important;
+    }
+    .light-mode .stButton > button:hover {
+        background: #f1f3f5 !important;
+    }
+    .light-mode button[data-testid="stBaseButton-primary"],
+    .light-mode .stButton > button[kind="primary"] {
+        color: #0A0B0E !important;
+    }
+    /* Inputs in light mode */
+    .light-mode .stTextInput > div > div,
+    .light-mode .stTextArea > div > div {
+        background: #ffffff !important;
+        color: #212529 !important;
+        border: 1px solid rgba(0,0,0,.15) !important;
+    }
+    .light-mode .stTextInput input,
+    .light-mode .stTextArea textarea {
+        color: #212529 !important;
+    }
+    .light-mode .stTextInput input::placeholder,
+    .light-mode .stTextArea textarea::placeholder {
+        color: #868e96 !important;
+        opacity: 1 !important;
+    }
+    /* Captions & muted text in light mode */
+    .light-mode .stCaption, .light-mode small {
+        color: #495057 !important;
+    }
+    /* Info boxes in light mode */
+    .light-mode .info-box {
+        background: #f8f9fa !important;
+        border: 1px solid rgba(0,0,0,.08) !important;
+        color: #212529 !important;
+    }
+    .light-mode .info-box * {
+        color: #212529 !important;
+    }
+    /* User profile card in light mode */
+    .light-mode .user-profile-card {
+        background: #ffffff !important;
+        border: 1px solid rgba(0,0,0,.1) !important;
+    }
+    .light-mode .user-name { color: #212529 !important; }
+    .light-mode .user-email { color: #495057 !important; }
+    /* Sidebar buttons in light mode */
+    .light-mode [data-testid="stSidebar"] .stButton > button {
+        background: #ffffff !important;
+        color: #212529 !important;
+        border: 1px solid rgba(0,0,0,.12) !important;
+    }
+    .light-mode [data-testid="stSidebar"] .stButton > button:hover {
+        background: #f1f3f5 !important;
+        border-color: var(--accent) !important;
+    }
+    /* Top intel bar in light mode */
+    .light-mode .top-intel-bar {
+        background: #f8f9fa !important;
+        border: 1px solid rgba(0,0,0,.08) !important;
+    }
+    .light-mode .top-intel-bar * {
+        color: #212529 !important;
     }
 
     /* ── Global Reset ─────────────────────────────────────────── */
@@ -277,40 +384,6 @@ st.markdown("""
     .stAppHeader,
     [data-testid="stHeader"] {
         display: none !important;
-    }
-    /* Fix ALL Material Symbols icon text leaks globally */
-    .material-symbols-rounded,
-    .material-symbols-outlined,
-    span[class*="material-symbols"],
-    [data-testid="stExpanderToggleIcon"],
-    .streamlit-expanderHeader span[class*="material"] {
-        font-size: 0 !important;
-        color: transparent !important;
-        width: 1.2em !important;
-        height: 1.2em !important;
-        display: inline-block !important;
-        position: relative !important;
-        vertical-align: middle !important;
-    }
-    .material-symbols-rounded::before,
-    .material-symbols-outlined::before,
-    span[class*="material-symbols"]::before,
-    [data-testid="stExpanderToggleIcon"]::before {
-        content: "›" !important;
-        font-size: 1.2rem !important;
-        color: var(--text-muted) !important;
-        font-family: var(--font-body) !important;
-        position: absolute !important;
-        top: 50% !important;
-        left: 50% !important;
-        transform: translate(-50%, -50%) !important;
-        line-height: 1 !important;
-    }
-    [aria-expanded="true"] .material-symbols-rounded::before,
-    [aria-expanded="true"] .material-symbols-outlined::before,
-    [aria-expanded="true"] span[class*="material-symbols"]::before,
-    [aria-expanded="true"] [data-testid="stExpanderToggleIcon"]::before {
-        content: "⌄" !important;
     }
     .block-container {
         padding: 1.5rem 2rem 3rem !important;
@@ -1215,7 +1288,6 @@ st.markdown("""
 
 """, unsafe_allow_html=True)
 
-
 @st.cache_resource
 def load_model(model_mtime=0.0):
     """Load the trained model pipeline."""
@@ -1224,46 +1296,38 @@ def load_model(model_mtime=0.0):
         return joblib.load(model_path)
     return None
 
-
 def get_preprocessor():
     """Initialize text preprocessor."""
     return TextPreprocessor()
-
 
 def get_scraper():
     """Initialize article scraper (not cached so code updates take effect)."""
     from utils.scraper import ArticleScraper
     return ArticleScraper()
 
-
 @st.cache_resource
 def get_nlp_engine():
     from utils.nlp_engine import NLPEngine
     return NLPEngine()
 
-
 @st.cache_resource
 def get_source_engine():
     return SourceEngine()
-
 
 @st.cache_resource
 def get_clickbait_detector():
     from utils.clickbait_detector import ClickbaitDetector
     return ClickbaitDetector()
 
-
 @st.cache_resource
 def get_ai_detector():
     from utils.ai_detector import AIContentDetector
     return AIContentDetector()
 
-
 @st.cache_resource
 def get_claim_verifier():
     from utils.claim_verifier import ClaimVerifier
     return ClaimVerifier()
-
 
 @st.cache_resource
 def _get_india_feed():
@@ -1274,12 +1338,10 @@ def _get_india_feed():
     except Exception:
         return None
 
-
 def _get_pdf_generator():
     """Lazy-import PDF generator."""
     from utils.pdf_generator import generate_credibility_pdf
     return generate_credibility_pdf
-
 
 def create_knowledge_graph(results):
     """
@@ -1451,7 +1513,6 @@ def create_knowledge_graph(results):
     )
     return fig
 
-
 def create_waterfall_chart(results):
     """
     Creates an explainable AI Waterfall chart showing step-by-step contribution to the final Credibility Score.
@@ -1547,7 +1608,6 @@ def create_waterfall_chart(results):
     )
     return fig
 
-
 def render_timeline(results):
     """Renders a compact, professional vertical timeline stepper."""
     is_refutation = results.get("article_stance") == "REFUTES"
@@ -1571,7 +1631,6 @@ def render_timeline(results):
         html += f'<div class="timeline-step {status_class}"><div class="timeline-icon">{marker}</div><div class="timeline-content"><div class="timeline-title">{step["title"]}</div><div class="timeline-desc">{step["desc"]}</div></div></div>'
     html += '</div>'
     st.markdown(html, unsafe_allow_html=True)
-
 
 def render_source_dossier(results):
     """Renders a professional dossier card for the source domain."""
@@ -1631,7 +1690,6 @@ def render_source_dossier(results):
     </div>
     """, unsafe_allow_html=True)
 
-
 def create_gauge_chart(score, title="Credibility Score"):
     """Create a gauge chart with enterprise dark charcoal + gold/cyan palette."""
     if score >= 0.65:
@@ -1675,7 +1733,6 @@ def create_gauge_chart(score, title="Credibility Score"):
         font={'family': 'Inter'}
     )
     return fig
-
 
 def explain_pattern(pat):
     """Maps raw pattern matches to user-friendly category descriptions."""
@@ -1892,7 +1949,6 @@ def explain_pattern(pat):
         return f"Indian Public System (\"{pat_str}\")"
 
     return f"Stylistic Pattern (\"{pat_str}\")"
-
 
 def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detector=None, claim_verifier=None, source_engine=None, url=None):
     """
@@ -2118,7 +2174,6 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         article_stance = "NEUTRAL"
         stance_confidence = 0.5
 
-
     # ── Misinformation Pattern Matching ──
     matched_themes = []
     misinfo_multiplier = 1.0
@@ -2151,49 +2206,52 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
     except Exception:
         pass
 
-    # ── 9. Weighted Ensemble Decision Engine (Transformer-Primary, Stance-Aware) ──
-    # Dynamic weight redistribution: when transformer is available it gets highest weight.
-    # When no source/factcheck signal, those weights redistribute to ML + NLP.
+    # ── 9. Weighted Ensemble Decision Engine (Enhanced Multi-Signal) ──
     has_source_signal = has_valid_url and source_profile is not None and source_profile.get("category") not in ["Unknown", "Unverified Source"]
     has_factcheck_signal = evidence_count > 0
     
+    # Writing quality score: combines credibility indicators with low sensationalism
+    writing_quality = max(0.0, min(1.0, cred_signal * 0.6 + (1.0 - sensationalism) * 0.4))
+    
+    # Citation/attribution density from stance detector
+    attribution_count = stance_result.get("attribution_count", 0)
+    citation_score = min(attribution_count / 5.0, 1.0)  # Caps at 5 attributions
+    
     if transformer_used:
-        # Transformer-primary weights
-        w_ml = 0.40      # Transformer-blended ML score
-        w_source = 0.15
-        w_factcheck = 0.20
-        w_clickbait = 0.05
-        w_nlp = 0.05
-        w_ai = 0.05
-        w_satire = 0.05
-        w_sentiment = 0.05  # NEW: sentiment/bias from VADER
-    else:
-        # TF-IDF-primary weights (backward compatible)
-        w_ml = 0.31
-        w_source = 0.20
-        w_factcheck = 0.25
-        w_clickbait = 0.05
+        w_ml = 0.35
+        w_source = 0.12
+        w_factcheck = 0.18
+        w_clickbait = 0.04
         w_nlp = 0.06
         w_ai = 0.05
-        w_satire = 0.08
-        w_sentiment = 0.0
+        w_satire = 0.04
+        w_sentiment = 0.04
+        w_writing = 0.07      # Writing quality
+        w_citation = 0.05     # Citation density
+    else:
+        w_ml = 0.28
+        w_source = 0.15
+        w_factcheck = 0.20
+        w_clickbait = 0.04
+        w_nlp = 0.07
+        w_ai = 0.05
+        w_satire = 0.06
+        w_sentiment = 0.02
+        w_writing = 0.08
+        w_citation = 0.05
     
-    # Redistribute phantom weights to ML when we have no real data
+    # Redistribute phantom weights when no real data exists
     if not has_source_signal:
-        w_ml += w_source * 0.5       # 50% of source weight -> ML
-        w_nlp += w_source * 0.5      # 50% of source weight -> NLP
+        w_ml += w_source * 0.4
+        w_nlp += w_source * 0.3
+        w_writing += w_source * 0.3
         w_source = 0.0
     if not has_factcheck_signal:
-        w_ml += w_factcheck * 0.7    # 70% of factcheck weight -> ML
-        w_nlp += w_factcheck * 0.3   # 30% of factcheck weight -> NLP
+        w_ml += w_factcheck * 0.5
+        w_nlp += w_factcheck * 0.2
+        w_writing += w_factcheck * 0.15
+        w_citation += w_factcheck * 0.15
         w_factcheck = 0.0
-    if not has_source_signal and not has_factcheck_signal:
-        w_nlp += 0.05
-        w_clickbait -= 0.025
-        w_ai -= 0.025
-        _ml_nlp_pool = w_ml + w_nlp
-        w_nlp = _ml_nlp_pool / 4.5   # pool / (ratio + 1), ratio = 3.5
-        w_ml = _ml_nlp_pool - w_nlp
     
     # Compute sentiment/bias score from NLP indicators
     sentiment_bias = 1.0 - indicators.get("sensationalism_score", 0.0)
@@ -2206,8 +2264,26 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         nlp_score * w_nlp +
         (1.0 - ai_score) * w_ai +
         (1.0 - satire_score) * w_satire +
-        sentiment_bias * w_sentiment
+        sentiment_bias * w_sentiment +
+        writing_quality * w_writing +
+        citation_score * w_citation
     )
+    
+    # ── Cross-signal agreement bonus ──
+    # When multiple independent signals agree on direction, boost confidence in that direction
+    signals_real = sum(1 for s in [ml_score, nlp_score, factcheck_score, (source_trust / 100.0), writing_quality]
+                       if s > 0.6)
+    signals_fake = sum(1 for s in [ml_score, nlp_score, factcheck_score, (source_trust / 100.0), writing_quality]
+                       if s < 0.4)
+    
+    if signals_real >= 3:
+        # 3+ signals agree it's credible — small convergence boost
+        agreement_boost = min((signals_real - 2) * 0.04, 0.08)
+        credibility += agreement_boost
+    elif signals_fake >= 3:
+        # 3+ signals agree it's not credible — small convergence penalty
+        agreement_penalty = min((signals_fake - 2) * 0.04, 0.08)
+        credibility -= agreement_penalty
 
     # ── ML Confidence Anchoring ──
     # Problem: well-written fake news scores high on NLP quality (no red flags,
@@ -2334,22 +2410,24 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
     stance_rel = stance_confidence if article_stance in ("REFUTES", "SUPPORTS") else 0.3
     
     reliability = (
-        source_rel_weight * 0.25 +
-        ev_rel * 0.25 +
-        agree_rel * 0.15 +
-        ml_rel * 0.15 +
-        stance_rel * 0.20
+        source_rel_weight * 0.20 +
+        ev_rel * 0.20 +
+        agree_rel * 0.12 +
+        ml_rel * 0.18 +
+        stance_rel * 0.15 +
+        writing_quality * 0.15   # Writing quality adds to reliability
     )
     reliability = float(max(0.0, min(1.0, reliability)))
     
-    # ── 12. 5-Level Verdict & Insufficient Override ──
-    if credibility >= 0.85:
+    # ── 12. Enhanced Verdict Mapping ──
+    # Tighter ranges reduce ambiguity in the middle band
+    if credibility >= 0.82:
         category = "Highly Credible"
     elif credibility >= 0.65:
         category = "Likely Real"
-    elif credibility >= 0.45:
+    elif credibility >= 0.50:
         category = "Uncertain"
-    elif credibility >= 0.20:
+    elif credibility >= 0.30:
         category = "Likely Fake"
     else:
         category = "High Risk Misinformation"
@@ -2359,35 +2437,54 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         category = "Likely Real"
         credibility = max(credibility, 0.65)
         
-    # Apply evidence sufficiency fallback: if there is no evidence and source is untrusted,
-    # cap credibility and verdict at 'Uncertain' to prevent false-positives on unverified/AI articles.
+    # Graduated evidence sufficiency fallback (instead of hard cap)
     if not is_sufficient and not is_factcheck_article:
-        if credibility > 0.58:
-            credibility = 0.58
-        if credibility >= 0.45:
-            category = "Uncertain"
-            reliability = min(reliability, 0.40)
-
+        # Scale the cap based on how much evidence is missing
+        if evidence_count == 0 and source_trust <= 40:
+            cap = 0.48  # No evidence + untrusted source = hard cap
+        elif evidence_count == 0:
+            cap = 0.55  # No evidence but neutral source
+        else:
+            cap = 0.60  # Some evidence but poor quality
         
-    # Final adjusted confidence — blend reliability with stance and evidence strength
-    evidence_confidence = min(evidence_count / 3.0, 1.0) if evidence_count > 0 else 0.3
+        if credibility > cap:
+            credibility = cap
+        if credibility >= 0.50:
+            category = "Uncertain"
+            reliability = min(reliability, 0.45)
+
+    # ── Confidence Calibration ──
+    # Count how many independent signal types contributed real data
+    signal_count = 1  # ML always contributes
+    if has_source_signal: signal_count += 1
+    if has_factcheck_signal: signal_count += 1
+    if transformer_used: signal_count += 1
+    if attribution_count > 0: signal_count += 1
+    signal_diversity = min(signal_count / 5.0, 1.0)  # 0.2 to 1.0
+    
+    evidence_confidence = min(evidence_count / 3.0, 1.0) if evidence_count > 0 else 0.2
     confidence = (
-        reliability * 0.5 +
-        evidence_confidence * 0.25 +
-        stance_confidence * 0.25
+        reliability * 0.35 +
+        evidence_confidence * 0.20 +
+        stance_confidence * 0.15 +
+        signal_diversity * 0.15 +       # More signals = more confident
+        raw_confidence * 0.15           # ML model's own confidence
     )
     confidence = float(min(max(confidence, 0.05), 0.99))
     
-    # Set final binary prediction (dynamic threshold based on NLP score and red flags if no external signals present)
+    # Dynamic binary threshold based on available signals
     if not has_source_signal and not has_factcheck_signal:
-        base_threshold = 0.55
-        # lower threshold when NLP signals strongly suggest fake
+        base_threshold = 0.53
         if nlp_score < 0.4:
-            threshold = base_threshold - 0.05  # 0.50, easier to call FAKE
+            threshold = base_threshold - 0.04  # 0.49
         elif redflag_count >= 2:
-            threshold = base_threshold - 0.08  # 0.47
+            threshold = base_threshold - 0.06  # 0.47
+        elif writing_quality < 0.35:
+            threshold = base_threshold - 0.03  # 0.50
         else:
             threshold = base_threshold
+    elif has_source_signal and has_factcheck_signal:
+        threshold = 0.48  # More lenient when we have external validation
     else:
         threshold = 0.50
         
@@ -2627,8 +2724,6 @@ def predict_article(text, model, preprocessor, clickbait_detector=None, ai_detec
         'evidence_report': evidence_report,
     }
 
-
-
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -2636,8 +2731,10 @@ from email.mime.multipart import MIMEMultipart
 def get_db_connection():
     db_path = os.path.join(PROJECT_ROOT, "data", "truthshield.db")
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=10)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 def init_db():
@@ -2964,7 +3061,6 @@ def send_otp_email(to_email, otp):
     except Exception as e:
         return False, str(e)
 
-
 @st.cache_resource
 def start_updater_daemon():
     """Start the background update daemon exactly once, completely hiding the console window on Windows."""
@@ -3022,7 +3118,6 @@ def load_live_metrics():
         "total_articles": total_articles,
         "model_type": model_type
     }
-
 
 def render_landing():
     """Render the premium intelligence platform landing page."""
@@ -3150,8 +3245,6 @@ def render_landing():
     </div>
     """, unsafe_allow_html=True)
 
-
-
 def render_login():
     """Render the Gmail OTP login page."""
 
@@ -3176,14 +3269,14 @@ def render_login():
         """, unsafe_allow_html=True)
 
         with st.container(border=False):
-            last_email = get_last_user()
-            email_input = st.text_input("Enter your Gmail Address:", value=last_email, placeholder="name@gmail.com", key="login_email", on_change=lambda: None)
+            email_input = st.text_input("Enter your Email Address:", placeholder="name@gmail.com", key="login_email", on_change=lambda: None)
             
             if not st.session_state.otp_sent:
                 if st.button("Send Verification Code →", type="primary", key="send_otp_btn", use_container_width=True):
                     if email_input and re.match(r"[^@]+@[^@]+\.[^@]+", email_input.strip()):
-                        otp = str(random.randint(100000, 999999))
-                        st.session_state.otp_code = otp
+                        otp = str(secrets.randbelow(900000) + 100000)
+                        st.session_state.otp_hash = hashlib.sha256(otp.encode()).hexdigest()
+                        st.session_state.otp_attempts = 0
                         st.session_state.email = email_input.strip()
                         
                         with st.spinner("✉️ Sending verification code..."):
@@ -3191,12 +3284,6 @@ def render_login():
                             
                         st.session_state.otp_sent = True
                         st.session_state.otp_sent_time = time.time()
-                        print(f"[AUTH] Email: {email_input.strip()} | OTP: {otp} | Sent: {success}", flush=True)
-                        try:
-                            with open(os.path.join(tempfile.gettempdir(), "otp_debug.txt"), "w", encoding="utf-8") as f:
-                                f.write(otp)
-                        except Exception:
-                            pass
                         if success:
                             st.session_state.login_message = ("success", f"📨 Verification code sent to **{email_input}**!")
                         else:
@@ -3220,18 +3307,27 @@ def render_login():
                 col_btn_verify, col_btn_resend = st.columns(2)
                 with col_btn_verify:
                     if st.button("Verify & Sign In →", type="primary", key="verify_otp_btn", use_container_width=True):
-                        if otp_input.strip() == st.session_state.otp_code:
+                        otp_age = time.time() - (st.session_state.get("otp_sent_time") or 0)
+                        attempts = st.session_state.get("otp_attempts", 0)
+                        if attempts >= 5:
+                            st.error("🔒 Too many attempts. Please resend a new code.")
+                        elif otp_age > 600:
+                            st.error("⏱️ Code expired. Please resend a new code.")
+                        elif hashlib.sha256(otp_input.strip().encode()).hexdigest() == st.session_state.get("otp_hash"):
                             st.session_state.logged_in = True
                             st.session_state.page = "dashboard"
+                            st.session_state.otp_hash = None
                             save_user(st.session_state.email)
                             st.success("✅ Signed in successfully!")
                             st.rerun()
                         else:
-                            st.error("❌ Incorrect verification code. Please try again.")
+                            st.session_state.otp_attempts = attempts + 1
+                            remaining = 5 - attempts - 1
+                            st.error(f"❌ Incorrect code. {remaining} attempt{'s' if remaining != 1 else ''} remaining.")
                 with col_btn_resend:
                     if st.button("Change Email", key="change_email_btn", use_container_width=True):
                         st.session_state.otp_sent = False
-                        st.session_state.otp_code = None
+                        st.session_state.otp_hash = None
                         st.session_state.login_message = None
                         st.rerun()
                 
@@ -3256,8 +3352,9 @@ def render_login():
                 
                 st.markdown('<div class="hidden-btn-container">', unsafe_allow_html=True)
                 if st.button("Resend OTP", key="resend_otp_trigger_btn", ):
-                    otp = str(random.randint(100000, 999999))
-                    st.session_state.otp_code = otp
+                    otp = str(secrets.randbelow(900000) + 100000)
+                    st.session_state.otp_hash = hashlib.sha256(otp.encode()).hexdigest()
+                    st.session_state.otp_attempts = 0
                     st.session_state.otp_sent_time = time.time()
                     with st.spinner("✉️ Resending verification code..."):
                         success, msg = send_otp_email(st.session_state.email, otp)
@@ -3385,10 +3482,9 @@ def render_login():
             if st.button("← Back to Homepage", key="back_to_home_btn", use_container_width=True):
                 st.session_state.page = "landing"
                 st.session_state.otp_sent = False
-                st.session_state.otp_code = None
+                st.session_state.otp_hash = None
                 st.session_state.login_message = None
                 st.rerun()
-
 
 def load_article_callback(text):
     st.session_state.article_input = text
@@ -3398,7 +3494,6 @@ def load_history_callback(text):
     st.session_state.article_input = text
     st.session_state.input_method_select = "📝 Paste Article Text"
     st.session_state.history_load_success = True
-
 
 def render_feedback_page():
     """Render the user feedback page."""
@@ -3525,7 +3620,6 @@ def render_feedback_page():
                 st.session_state.page = "dashboard"
                 st.rerun()
 
-
 def render_dashboard():
     """Render the credibility analyzer dashboard page."""
     model_path = os.path.join(PROJECT_ROOT, "model", "fake_news_model.pkl")
@@ -3553,7 +3647,6 @@ def render_dashboard():
         return
 
     with st.sidebar:
-        # ── Canva-style User Profile Card ──
         user_email = st.session_state.email
         display_name = email_to_display_name(user_email)
         initials = get_user_initials(display_name)
@@ -3598,15 +3691,17 @@ def render_dashboard():
             """,
             height=0,
         )
-        # Read India News Feed button
-        st.button(
-            "Read India News Feed",
+        # Read India News Feed toggle
+        if "show_india_feed" not in st.session_state:
+            st.session_state.show_india_feed = False
+        if st.button(
+            "▾ India News Feed" if st.session_state.show_india_feed else "▸ India News Feed",
             key="read_india_news_btn",
             use_container_width=True,
-            help="Click to load or refresh the India news feed"
-        )
-        st.markdown("---")
-        with st.expander("Feed", expanded=False):
+        ):
+            st.session_state.show_india_feed = not st.session_state.show_india_feed
+            st.rerun()
+        if st.session_state.show_india_feed:
             _india_feed = _get_india_feed()
             if _india_feed is not None:
                 feed_category = st.selectbox(
@@ -3625,7 +3720,6 @@ def render_dashboard():
                     st.caption(f"📡 {len(india_articles)} live headlines — click to fact-check:")
                     for idx, article in enumerate(india_articles[:12]):
                         src_color = _india_feed.get_source_color(article['source'])
-                        # Build a compact label with source badge
                         btn_label = f"{article['source']}: {article['title'][:65]}"
                         description = article.get('description', '') or article.get('title', '')
                         st.button(
@@ -3639,7 +3733,6 @@ def render_dashboard():
                     st.info("Could not fetch headlines. Check your internet connection.")
             else:
                 st.warning("Install `feedparser` to enable live India news: `pip install feedparser`")
-                # Fallback to hardcoded items
                 st.caption("Sample headlines for testing:")
                 news_items = [
                     ("India GDP Growth Reaches 7.2% in Q3", "India's gross domestic product grew at 7.2 percent in the October-December quarter, according to data released by the Ministry of Statistics. The growth was driven by strong performance in the manufacturing and services sectors."),
@@ -3705,8 +3798,6 @@ def render_dashboard():
         </div>
     </div>
     """, unsafe_allow_html=True)
-
-    # ── Workspace Tabs ──
     tab_analyze, tab_education, tab_analytics, tab_evaluation, tab_history = st.tabs(["Credibility Analyzer", "Media Literacy Hub", "Analytics & Insights", "Model Evaluation & Research", "Analysis History"])
 
     with tab_analyze:
@@ -3749,7 +3840,12 @@ def render_dashboard():
                             st.caption(f"Authors: {', '.join(result['authors'])}")
                         if result['publish_date']:
                             st.caption(f"Published: {result['publish_date']}")
-                        with st.expander("📄 View Extracted Text", expanded=False):
+                        if "show_extracted_text" not in st.session_state:
+                            st.session_state.show_extracted_text = False
+                        if st.button("▾ View Extracted Text" if st.session_state.show_extracted_text else "▸ View Extracted Text", key="toggle_extracted_text"):
+                            st.session_state.show_extracted_text = not st.session_state.show_extracted_text
+                            st.rerun()
+                        if st.session_state.show_extracted_text:
                             st.text(article_text[:2000] + ("..." if len(article_text) > 2000 else ""))
                     else:
                         st.error(f"❌ {result['error']}")
@@ -3878,37 +3974,25 @@ def render_dashboard():
                     st.session_state.page = "feedback"
                     st.rerun()
                 else:
-                    st.html(f"""
-                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: rgba(229, 193, 88, 0.04); border: 1px solid rgba(229, 193, 88, 0.2); border-radius: 8px; padding: 12px 18px; display: flex; justify-content: space-between; align-items: center; color: var(--text-primary); font-size: 14px; margin-bottom: 0.5rem; backdrop-filter: blur(8px);">
+                    mins, secs = divmod(remaining, 60)
+                    st.markdown(f"""<div style="background: rgba(229, 193, 88, 0.04); border: 1px solid rgba(229, 193, 88, 0.2); border-radius: 8px; padding: 12px 18px; display: flex; justify-content: space-between; align-items: center; font-size: 14px; margin-bottom: 0.5rem;">
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <span style="font-size: 1.15rem;">⏱️</span>
-                            <span>Redirecting to <b>Accuracy Calibration (Feedback)</b> in <span id="ts-timer" style="color: #E5C158; font-weight: bold; font-family: monospace; font-size: 1.1rem;">{remaining}</span> seconds...</span>
+                            <span>Redirecting to <b>Accuracy Calibration (Feedback)</b> in <span style="color: #E5C158; font-weight: bold; font-family: monospace; font-size: 1.1rem;">{mins}:{secs:02d}</span></span>
                         </div>
-                        <div style="display: flex; gap: 8px;">
-                            <button onclick="tsGoNow()" style="background: #E5C158; color: #090A0D; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; transition: background 0.2s;">Calibrate Now</button>
-                            <button onclick="tsCancelTimer()" style="background: rgba(255,255,255,0.05); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.1); padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: background 0.2s;">Cancel Timer</button>
-                        </div>
-                    </div>
-                    <script>
-                        var tsRemaining = {remaining};
-                        var tsTimerSpan = document.getElementById("ts-timer");
-                        var tsInterval = setInterval(function() {{
-                            tsRemaining = tsRemaining - 1;
-                            if (tsTimerSpan) tsTimerSpan.textContent = tsRemaining;
-                            if (tsRemaining <= 0) {{
-                                clearInterval(tsInterval);
-                                window.location.search = "?page=feedback";
-                            }}
-                        }}, 1000);
-                        
-                        function tsGoNow() {{
-                            window.location.search = "?page=feedback";
-                        }}
-                        function tsCancelTimer() {{
-                            window.location.search = "?cancel_redirect=1";
-                        }}
-                    </script>
-                    """)
+                    </div>""", unsafe_allow_html=True)
+                    
+                    col_cal, col_cancel = st.columns([1, 1])
+                    with col_cal:
+                        if st.button("⚡ Calibrate Now", key="calibrate_now_btn", type="primary", use_container_width=True):
+                            st.session_state.pending_feedback = False
+                            st.session_state.page = "feedback"
+                            st.rerun()
+                    with col_cancel:
+                        if st.button("✕ Cancel Timer", key="cancel_timer_btn", use_container_width=True):
+                            st.session_state.pending_feedback = False
+                            st.session_state.analysis_completed_time = None
+                            st.rerun()
 
             cat = results['category']
             
@@ -3986,22 +4070,6 @@ def render_dashboard():
                             col_c = "var(--danger)" if "-" in f.get('impact', '') else "var(--success)"
                             st.markdown(f"<div style='font-size: 0.72rem; display:flex; justify-content:space-between;'><span>• {f['factor']}</span><span style='color:{col_c}; font-weight:600;'>{f['impact']}</span></div>", unsafe_allow_html=True)
 
-                st.markdown("<br>", unsafe_allow_html=True)
-
-                # ── Visualizations Row: Knowledge Graph & Waterfall side-by-side ──
-                col_kg, col_wf = st.columns([1, 1])
-                with col_kg:
-                    with st.container(border=True):
-                        st.markdown("#### 🕸️ Investigation Knowledge Graph")
-                        kg_fig = create_knowledge_graph(results)
-                        st.plotly_chart(kg_fig, use_container_width=True, config={'displayModeBar': False})
-
-                with col_wf:
-                    with st.container(border=True):
-                        st.markdown("#### 📊 Explainable AI Waterfall Chart")
-                        wf_fig = create_waterfall_chart(results)
-                        st.plotly_chart(wf_fig, use_container_width=True, config={'displayModeBar': False})
-
             with col_results_side:
                 # ── System Intel Readout Panel ──
                 st.markdown('<div class="right-panel-title">🛡️ SYSTEM INTEL READOUT</div>', unsafe_allow_html=True)
@@ -4075,120 +4143,131 @@ def render_dashboard():
                     st.markdown("#### 🕒 Investigation Timeline")
                     render_timeline(results)
 
-            # Let the remaining actions render below inside col_results_main
-            with col_results_main:
-                # ── Action Center & PDF/CSV Exporting Row ──
-                st.markdown("---")
-                
-                cat_explain = ""
-                cat_val = results['category']
-                if cat_val == 'REAL':
-                    cat_explain = "This article was classified as REAL because the voting classifier ensemble validated the linguistic features, the source has high reputational alignment, and RAG fact check databases did not verify any contradictory reports."
-                elif cat_val == 'SATIRE':
-                    cat_explain = "This article was classified as SATIRE because the publisher has a documented parodic index in our reputation database."
-                elif cat_val == 'CLICKBAIT':
-                    cat_explain = "This article was classified as CLICKBAIT due to high sensationalism scores and click-inducing title formatting patterns."
-                elif cat_val == 'MISLEADING':
-                    cat_explain = "This article was classified as MISLEADING due to conflicting credibility indexes or unverified claims matched."
-                else:
-                    cat_explain = "This article was classified as FAKE due to high classification confidence, verified RAG contradictions, or low-trust source records."
+            # ── Visualizations Row: Knowledge Graph & Waterfall side-by-side (full width) ──
+            col_kg, col_wf = st.columns([1, 1])
+            with col_kg:
+                with st.container(border=True):
+                    st.markdown("#### 🕸️ Investigation Knowledge Graph")
+                    kg_fig = create_knowledge_graph(results)
+                    st.plotly_chart(kg_fig, use_container_width=True, config={'displayModeBar': False})
+            with col_wf:
+                with st.container(border=True):
+                    st.markdown("#### 📊 Explainable AI Waterfall Chart")
+                    wf_fig = create_waterfall_chart(results)
+                    st.plotly_chart(wf_fig, use_container_width=True, config={'displayModeBar': False})
 
-                words_list = article_text.strip().split()
-                title_prefix = " ".join(words_list[:6]) + ("..." if len(words_list) > 6 else "")
+            # ── Action Center & PDF/CSV Exporting Row ──
+            st.markdown("---")
                 
-                try:
-                    generate_credibility_pdf = _get_pdf_generator()
-                    pdf_bytes = generate_credibility_pdf(
-                        title=title_prefix,
-                        summary=summary_data,
-                        prediction=results['prediction'],
-                        confidence=results['confidence'],
-                        credibility=results['credibility'],
-                        indicators=results.get('indicators'),
-                        domain_profile=domain_profile,
-                        sentiment=sentiment_data,
-                        entities=entities_data,
-                        category=results.get('category'),
-                        clickbait_score=results.get('clickbait_score'),
-                        ai_score=results.get('ai_score'),
-                        verification_results=results.get('verification_results'),
-                        source_trust=results.get('source_trust'),
-                        explanation=cat_explain
+            cat_explain = ""
+            cat_val = results['category']
+            if cat_val == 'REAL':
+                cat_explain = "This article was classified as REAL because the voting classifier ensemble validated the linguistic features, the source has high reputational alignment, and RAG fact check databases did not verify any contradictory reports."
+            elif cat_val == 'SATIRE':
+                cat_explain = "This article was classified as SATIRE because the publisher has a documented parodic index in our reputation database."
+            elif cat_val == 'CLICKBAIT':
+                cat_explain = "This article was classified as CLICKBAIT due to high sensationalism scores and click-inducing title formatting patterns."
+            elif cat_val == 'MISLEADING':
+                cat_explain = "This article was classified as MISLEADING due to conflicting credibility indexes or unverified claims matched."
+            else:
+                cat_explain = "This article was classified as FAKE due to high classification confidence, verified RAG contradictions, or low-trust source records."
+
+            words_list = article_text.strip().split()
+            title_prefix = " ".join(words_list[:6]) + ("..." if len(words_list) > 6 else "")
+            
+            try:
+                generate_credibility_pdf = _get_pdf_generator()
+                pdf_bytes = generate_credibility_pdf(
+                    title=title_prefix,
+                    summary=summary_data,
+                    prediction=results['prediction'],
+                    confidence=results['confidence'],
+                    credibility=results['credibility'],
+                    indicators=results.get('indicators'),
+                    domain_profile=domain_profile,
+                    sentiment=sentiment_data,
+                    entities=entities_data,
+                    category=results.get('category'),
+                    clickbait_score=results.get('clickbait_score'),
+                    ai_score=results.get('ai_score'),
+                    verification_results=results.get('verification_results'),
+                    source_trust=results.get('source_trust'),
+                    explanation=cat_explain
+                )
+            except Exception:
+                pdf_bytes = b""
+                
+            csv_df = pd.DataFrame([{
+                "title": title_prefix,
+                "prediction": results['prediction'],
+                "confidence": results['confidence'],
+                "category": results.get('category', results['prediction']),
+                "credibility": results['credibility'],
+                "clickbait_score": results.get('clickbait_score', 0.0),
+                "ai_score": results.get('ai_score', 0.0),
+                "source_trust": results.get('source_trust', 50.0),
+                "summary": summary_data,
+                "fear_score": sentiment_data['fear'],
+                "anger_score": sentiment_data['anger'],
+                "neutral_score": sentiment_data['neutral'],
+                "people": ", ".join(entities_data['people']),
+                "organizations": ", ".join(entities_data['organizations']),
+                "locations": ", ".join(entities_data['locations'])
+            }])
+            csv_bytes = csv_df.to_csv(index=False).encode('utf-8')
+
+            col_feed1, col_feed2, col_feed3 = st.columns([1.5, 1.2, 1.8])
+            with col_feed1:
+                with st.container(border=True):
+                    st.markdown("#### 📥 Document Exports")
+                    st.caption("Generate reports for offline verification dossier archives.")
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.download_button(
+                        label="📥 Download PDF Report",
+                        data=pdf_bytes,
+                        file_name=f"truthshield_{int(time.time())}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
                     )
-                except Exception:
-                    pdf_bytes = b""
+                    st.download_button(
+                        label="📊 Export Data as CSV",
+                        data=csv_bytes,
+                        file_name=f"truthshield_{int(time.time())}.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
                     
-                csv_df = pd.DataFrame([{
-                    "title": title_prefix,
-                    "prediction": results['prediction'],
-                    "confidence": results['confidence'],
-                    "category": results.get('category', results['prediction']),
-                    "credibility": results['credibility'],
-                    "clickbait_score": results.get('clickbait_score', 0.0),
-                    "ai_score": results.get('ai_score', 0.0),
-                    "source_trust": results.get('source_trust', 50.0),
-                    "summary": summary_data,
-                    "fear_score": sentiment_data['fear'],
-                    "anger_score": sentiment_data['anger'],
-                    "neutral_score": sentiment_data['neutral'],
-                    "people": ", ".join(entities_data['people']),
-                    "organizations": ", ".join(entities_data['organizations']),
-                    "locations": ", ".join(entities_data['locations'])
-                }])
-                csv_bytes = csv_df.to_csv(index=False).encode('utf-8')
+            with col_feed2:
+                with st.container(border=True):
+                    st.markdown("#### 💬 Calibrate Model")
+                    st.caption("Submit Analyst feedback to improve classifier thresholds.")
+                    st.markdown("<br><br>", unsafe_allow_html=True)
+                    if st.button("📢 Submit Accuracy Feedback", key="go_to_feedback_page_btn", type="primary", use_container_width=True):
+                        st.session_state.page = "feedback"
+                        st.rerun()
 
-                col_feed1, col_feed2, col_feed3 = st.columns([1.5, 1.2, 1.8])
-                with col_feed1:
-                    with st.container(border=True):
-                        st.markdown("#### 📥 Document Exports")
-                        st.caption("Generate reports for offline verification dossier archives.")
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        st.download_button(
-                            label="📥 Download PDF Report",
-                            data=pdf_bytes,
-                            file_name=f"truthshield_{int(time.time())}.pdf",
-                            mime="application/pdf",
-                            use_container_width=True
-                        )
-                        st.download_button(
-                            label="📊 Export Data as CSV",
-                            data=csv_bytes,
-                            file_name=f"truthshield_{int(time.time())}.csv",
-                            mime="text/csv",
-                            use_container_width=True
-                        )
-                        
-                with col_feed2:
-                    with st.container(border=True):
-                        st.markdown("#### 💬 Calibrate Model")
-                        st.caption("Submit Analyst feedback to improve classifier thresholds.")
-                        st.markdown("<br><br>", unsafe_allow_html=True)
-                        if st.button("📢 Submit Accuracy Feedback", key="go_to_feedback_page_btn", type="primary", use_container_width=True):
-                            st.session_state.page = "feedback"
-                            st.rerun()
-
-                with col_feed3:
-                    with st.container(border=True):
-                        st.markdown("#### 🛠️ Fact-Check Cross-References")
-                        st.caption("Search external intelligence clearinghouses for verification:")
-                        
-                        search_query = ""
-                        if article_text:
-                            search_query = "+".join(article_text.split()[:8])
-                        
-                        st.markdown(f"""
-                        <div style="display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 0.5rem;">
-                            <a href="https://www.snopes.com/?s={search_query}" target="_blank" style="text-decoration:none;">
-                                <button style="width:100%; text-align:left; background:#151821; color:var(--text-primary); border:1px solid var(--border); padding:0.4rem 0.8rem; border-radius:6px; cursor:pointer; font-size:0.75rem; font-family:var(--font-mono);">🔍 Search Snopes Index</button>
-                            </a>
-                            <a href="https://www.politifact.com/search/?q={search_query}" target="_blank" style="text-decoration:none;">
-                                <button style="width:100%; text-align:left; background:#151821; color:var(--text-primary); border:1px solid var(--border); padding:0.4rem 0.8rem; border-radius:6px; cursor:pointer; font-size:0.75rem; font-family:var(--font-mono);">⚖️ Search PolitiFact KB</button>
-                            </a>
-                            <a href="https://www.google.com/search?q={search_query}+fact+check" target="_blank" style="text-decoration:none;">
-                                <button style="width:100%; text-align:left; background:rgba(255,255,255,0.02); color:var(--text-primary); border:1px solid rgba(255,255,255,0.06); padding:0.5rem 1rem; border-radius:8px; cursor:pointer; font-weight:600;">🌐 Google Fact-Check Search</button>
-                            </a>
-                        </div>
-                        """, unsafe_allow_html=True)
+            with col_feed3:
+                with st.container(border=True):
+                    st.markdown("#### 🛠️ Fact-Check Cross-References")
+                    st.caption("Search external intelligence clearinghouses for verification:")
+                    
+                    search_query = ""
+                    if article_text:
+                        search_query = "+".join(article_text.split()[:8])
+                    
+                    st.markdown(f"""
+                    <div style="display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 0.5rem;">
+                        <a href="https://www.snopes.com/?s={search_query}" target="_blank" style="text-decoration:none;">
+                            <button style="width:100%; text-align:left; background:#151821; color:var(--text-primary); border:1px solid var(--border); padding:0.4rem 0.8rem; border-radius:6px; cursor:pointer; font-size:0.75rem; font-family:var(--font-mono);">🔍 Search Snopes Index</button>
+                        </a>
+                        <a href="https://www.politifact.com/search/?q={search_query}" target="_blank" style="text-decoration:none;">
+                            <button style="width:100%; text-align:left; background:#151821; color:var(--text-primary); border:1px solid var(--border); padding:0.4rem 0.8rem; border-radius:6px; cursor:pointer; font-size:0.75rem; font-family:var(--font-mono);">⚖️ Search PolitiFact KB</button>
+                        </a>
+                        <a href="https://www.google.com/search?q={search_query}+fact+check" target="_blank" style="text-decoration:none;">
+                            <button style="width:100%; text-align:left; background:rgba(255,255,255,0.02); color:var(--text-primary); border:1px solid rgba(255,255,255,0.06); padding:0.5rem 1rem; border-radius:8px; cursor:pointer; font-weight:600;">🌐 Google Fact-Check Search</button>
+                        </a>
+                    </div>
+                    """, unsafe_allow_html=True)
 
         elif predict_clicked:
             if "📝" in input_mode:
@@ -4631,7 +4710,12 @@ def render_dashboard():
             
             if misclassified:
                 st.info("🔍 **Model Corrections Based on Your Feedback:** These articles were flagged as misclassified by users. The model is learning from this data.")
-                with st.expander("📋 View misclassified articles"):
+                if "show_misclassified" not in st.session_state:
+                    st.session_state.show_misclassified = False
+                if st.button("▾ View misclassified articles" if st.session_state.show_misclassified else "▸ View misclassified articles", key="toggle_misclassified"):
+                    st.session_state.show_misclassified = not st.session_state.show_misclassified
+                    st.rerun()
+                if st.session_state.show_misclassified:
                     for article in misclassified[:10]:
                         col_art1, col_art2 = st.columns([3, 1])
                         with col_art1:
@@ -4639,6 +4723,7 @@ def render_dashboard():
                             st.caption(f"Rating: {'⭐' * (article['rating'] or 0)} | Notes: {article['notes'][:100] if article['notes'] else 'N/A'}")
                         with col_art2:
                             st.caption(f"📅 {article['timestamp']}")
+
         except Exception as e:
             st.caption(f"⚠️ Could not load feedback analytics: {str(e)}")
 
@@ -5030,7 +5115,6 @@ def render_dashboard():
     </div>
     """, unsafe_allow_html=True)
 
-
 def main():
     # Parse query parameters for redirecting
     if "page" in st.query_params:
@@ -5059,36 +5143,25 @@ def main():
 
     # Initialize session state variables from stored config
     config = load_smtp_config()
-    if "smtp_user" not in st.session_state:
-        st.session_state.smtp_user = config.get("smtp_user", "")
-    if "smtp_password" not in st.session_state:
-        st.session_state.smtp_password = config.get("smtp_password", "")
-    if "smtp_server" not in st.session_state:
-        st.session_state.smtp_server = config.get("smtp_server", "smtp.gmail.com")
-    if "smtp_port" not in st.session_state:
-        st.session_state.smtp_port = config.get("smtp_port", 587)
-    if "page" not in st.session_state:
-        st.session_state.page = "landing"
-    if "logged_in" not in st.session_state:
-        st.session_state.logged_in = False
-    if "email" not in st.session_state:
-        st.session_state.email = ""
-    if "history_load_success" not in st.session_state:
-        st.session_state.history_load_success = False
-    if "otp_code" not in st.session_state:
-        st.session_state.otp_code = None
-    if "otp_sent" not in st.session_state:
-        st.session_state.otp_sent = False
-    if "login_message" not in st.session_state:
-        st.session_state.login_message = None
-    if "otp_sent_time" not in st.session_state:
-        st.session_state.otp_sent_time = None
-    if "pending_feedback" not in st.session_state:
-        st.session_state.pending_feedback = False
-    if "analysis_completed_time" not in st.session_state:
-        st.session_state.analysis_completed_time = None
-
-
+    defaults = {
+        "smtp_user": config.get("smtp_user", ""),
+        "smtp_password": config.get("smtp_password", ""),
+        "smtp_server": config.get("smtp_server", "smtp.gmail.com"),
+        "smtp_port": config.get("smtp_port", 587),
+        "page": "landing",
+        "logged_in": False,
+        "email": "",
+        "history_load_success": False,
+        "otp_hash": None,
+        "otp_sent": False,
+        "otp_attempts": 0,
+        "login_message": None,
+        "otp_sent_time": None,
+        "pending_feedback": False,
+        "analysis_completed_time": None,
+    }
+    for key, val in defaults.items():
+        st.session_state.setdefault(key, val)
 
     # Page routing logic
     if st.session_state.page == "landing":

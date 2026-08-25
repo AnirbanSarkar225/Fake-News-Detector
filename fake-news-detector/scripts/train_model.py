@@ -2,12 +2,17 @@
 Model Training Script for Fake News Detector.
 
 Trains an Ensemble (LinearSVC + LogisticRegression + PassiveAggressive + ExtraTrees) pipeline
-with TF-IDF (75k features, trigrams) for robust fake news classification.
+with TF-IDF (50k features, bigrams) for robust fake news classification.
 
 Ensemble uses soft voting via CalibratedClassifierCV for probability calibration.
 """
 
 import os
+# Limit BLAS/OpenBLAS threads BEFORE importing numpy/sklearn to prevent OOM
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+
 import sys
 import io
 import time
@@ -52,7 +57,7 @@ def train_model():
     print("╔══════════════════════════════════════════════════════════════╗")
     print("║   🛡️  TruthShield — Production Ensemble Training            ║")
     print("║   LinearSVC + LogisticRegression + PA + ExtraTrees          ║")
-    print("║   TF-IDF: 75k features, (1,3) n-grams                      ║")
+    print("║   TF-IDF: 50k features, (1,2) n-grams                      ║")
     print("╚══════════════════════════════════════════════════════════════╝")
     print()
 
@@ -155,12 +160,12 @@ def train_model():
     gc.collect()
 
     # ── Step 4: TF-IDF Vectorization ──────────────────────────────
-    print("\n📐 Step 4/6: Fitting TF-IDF Vectorizer (75k features, trigrams)...")
+    print("\n📐 Step 4/6: Fitting TF-IDF Vectorizer (50k features, bigrams)...")
     tfidf = TfidfVectorizer(
-        max_features=75000,
-        ngram_range=(1, 3),  # Trigrams for better context
+        max_features=50000,
+        ngram_range=(1, 2),  # Bigrams — captures context without OOM on 8GB RAM
         max_df=0.90,
-        min_df=3,            # Allow rarer but discriminative terms
+        min_df=5,            # Prune rare terms to reduce matrix size
         sublinear_tf=True,
     )
     X_train_tfidf = tfidf.fit_transform(X_train)
@@ -172,23 +177,23 @@ def train_model():
     print("\n🤖 Step 5/6: Training ensemble classifier...")
     start_time = time.time()
 
-    # Build soft-voting ensemble
+    # Build soft-voting ensemble (memory-optimized for 8GB systems)
     print("\n   Building VotingClassifier (soft voting)...")
 
-    # Since VotingClassifier doesn't support pre-fitted estimators easily,
-    # we create a fresh ensemble and train it
     from sklearn.ensemble import ExtraTreesClassifier
     
     ensemble = VotingClassifier(
         estimators=[
-            ('svc', CalibratedClassifierCV(LinearSVC(C=1.0, max_iter=5000, random_state=42, verbose=1), cv=3, method='sigmoid')),
+            ('svc', CalibratedClassifierCV(LinearSVC(C=1.0, max_iter=5000, random_state=42, verbose=1), cv=2, method='sigmoid')),
             ('lr', LogisticRegression(C=1.0, max_iter=1000, random_state=42, solver='lbfgs', verbose=1)),
-            ('pa', CalibratedClassifierCV(PassiveAggressiveClassifier(C=1.0, max_iter=500, random_state=42, verbose=1), cv=3, method='sigmoid')),
-            ('et', ExtraTreesClassifier(n_estimators=100, max_depth=25, random_state=42, n_jobs=-1, verbose=1)),
+            ('pa', CalibratedClassifierCV(PassiveAggressiveClassifier(C=1.0, max_iter=500, random_state=42, verbose=1), cv=2, method='sigmoid')),
+            ('et', ExtraTreesClassifier(n_estimators=50, max_depth=20, random_state=42, n_jobs=1, verbose=1)),
         ],
         voting='soft',
-        weights=[3, 2, 2, 1],  # Rebalanced weights for optimal ensemble accuracy
+        weights=[3, 2, 2, 1],
     )
+    
+    gc.collect()  # Free memory before training
     ensemble.fit(X_train_tfidf, y_train)
 
     elapsed = time.time() - start_time
@@ -298,7 +303,7 @@ def train_model():
         "roc_auc": auc_score,
         "model_type": "Ensemble (LinearSVC + LogisticRegression + PassiveAggressive + ExtraTrees)",
         "tfidf_features": int(len(tfidf.vocabulary_)),
-        "ngram_range": [1, 3],
+        "ngram_range": [1, 2],
         "individual_accuracy": {
             "LinearSVC": float(svc_acc),
             "LogisticRegression": float(lr_acc),

@@ -116,8 +116,8 @@ def retrain_model(train_df, dry_run=False):
     from sklearn.calibration import CalibratedClassifierCV
 
     print("  Building TF-IDF features...")
-    tfidf = TfidfVectorizer(max_features=75000, ngram_range=(1, 3),
-                            sublinear_tf=True, min_df=2)
+    tfidf = TfidfVectorizer(max_features=50000, ngram_range=(1, 2),
+                            sublinear_tf=True, min_df=3)
 
     svc = CalibratedClassifierCV(LinearSVC(max_iter=3000, C=1.0), cv=3)
     lr = LogisticRegression(max_iter=1000, C=1.0, solver="lbfgs")
