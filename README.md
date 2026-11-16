@@ -1,4 +1,4 @@
-# 🛡️ TruthShield — AI Credibility Intelligence Platform
+# TruthShield — AI Credibility Intelligence Platform
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python">
@@ -14,7 +14,7 @@
 
 ---
 
-## 📌 Executive Overview
+## Executive Overview
 
 **TruthShield** is a full-stack, explainable Artificial Intelligence platform designed to analyze the credibility of digital news articles and public claims. Rather than providing an opaque binary classification, TruthShield executes a multi-stage credibility assessment combining:
 
@@ -28,7 +28,7 @@
 
 ---
 
-## 📊 Verified Machine Learning Performance
+## Verified Machine Learning Performance
 
 All performance metrics below are empirically evaluated against an independent, held-out test split of **25,754 articles** from a combined historical corpus of **128,769 articles** (stored in `model/evaluation_metrics.json`):
 
@@ -68,7 +68,7 @@ The production ensemble weights predictions across four distinct classifiers tra
 
 ---
 
-## 🏗️ System Architecture & Data Flow
+## System Architecture & Data Flow
 
 The diagram below details the pipeline executed when an article URL or text passage is submitted for credibility analysis:
 
@@ -114,7 +114,7 @@ flowchart TD
 
 ---
 
-## 📂 Repository Layout
+## Repository Layout
 
 ```
 Fake-News-Detector/
@@ -153,7 +153,7 @@ Fake-News-Detector/
 
 ---
 
-## ⚡ Installation & Quick Start
+## Installation & Quick Start
 
 ### Prerequisites
 * Python 3.10, 3.11, or 3.12
@@ -198,7 +198,7 @@ uvicorn src.api_server:app --host 0.0.0.0 --port 8000 --reload
 
 ---
 
-## 🧪 Testing & Verification
+## Testing & Verification
 
 Run the automated test suite to verify pipeline components, regex filters, and classifier loading:
 ```bash
@@ -209,7 +209,7 @@ python testing/stress_test_hard.py
 
 ---
 
-## 🔒 Security & Safe Operational Practices
+## Security & Safe Operational Practices
 
 1. **Input Sanitization:** URL inputs are validated and restricted against SSRF risks; text inputs undergo regex sanitization before vectorization to prevent memory bloat.
 2. **Credential Management:** External API keys are read via environment variables using `python-dotenv` and never hardcoded in scripts.
@@ -217,7 +217,7 @@ python testing/stress_test_hard.py
 
 ---
 
-## 📄 License & Technical Preparation
+## License & Technical Preparation
 
 * Licensed under the [MIT License](LICENSE).
 * For detailed engineering trade-offs, architecture decisions, and interviewer Q&A, refer to the [Technical Interview Guide](docs/INTERVIEW_PREP.md).
